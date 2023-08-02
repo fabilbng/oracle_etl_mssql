@@ -74,7 +74,7 @@ def load_to_mssql_variable_columns(transformed_path, table_name):
                         writer.writerow(row)
 
 
-                except pyodbc.ProgrammingError as e:
+                except pyodbc.Error as e:
                     log_error(f'Error loading data to MSSQL DB: {e}')
                     #if insert fails, save row to csv in failed_inserts folder
                     #create failed_inserts folder in table_name_folder if it does not exist

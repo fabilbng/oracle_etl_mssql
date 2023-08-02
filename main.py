@@ -1,7 +1,6 @@
 import os
 import importlib
 from script.utils.loggingSetup import setup_logger, log_info, log_error, log_warning
-from pipelines.zbtab2_import import run as zbtab2_import
 
 def load_pipelines(pipeline_dir):
     pipelines = []
@@ -30,7 +29,6 @@ def execute_pipelines(pipelines):
 
 if __name__ == "__main__":
     setup_logger()
-    #pipeline_directory = "pipelines"
-    #loaded_pipelines = load_pipelines(pipeline_directory)
-    #execute_pipelines(loaded_pipelines)
-    zbtab2_import()
+    pipeline_directory = "pipelines"
+    loaded_pipelines = load_pipelines(pipeline_directory)
+    execute_pipelines(loaded_pipelines)
