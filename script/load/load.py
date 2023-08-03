@@ -17,7 +17,7 @@ env = os.getenv('ENV')
 
 
 
-def load_to_mssql_variable_columns(transformed_path, table_name):
+def load(transformed_path, table_name):
     #loading data to mssql table, table name must be given, columns are variable depending on csv format
     try:
         log_info('Loading data to MSSQL DB')

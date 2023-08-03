@@ -1,0 +1,14 @@
+Tables to import
+ARTDAT
+ARTLIF
+ARTSTL
+LIFDAT
+BESDAT
+BESPOS
+LAGDAT
+ZBTAB2
+
+Functions: 
+- synchronising erp with mssql BI database
+- should have a custom set interval 
+- dynamically the columns structure
