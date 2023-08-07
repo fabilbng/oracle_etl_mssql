@@ -33,7 +33,7 @@ class OraclePipeline:
             self.table_name = 'ARTLIF'
             self.exclude_columns = []
             #timestamp of when the pipeline is run
-            self.run_date = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            self.run_date = datetime.datetime.now().strftime('%Y%d%m_%H%M%S')
             logger.info('Connecting to oracle database')
             self.oracle_conn = oracledb.connect(user=oracle_un, password=oracle_pw, dsn=oracle_db)
 
