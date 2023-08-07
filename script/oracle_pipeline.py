@@ -4,7 +4,7 @@ import pandas as pd
 import datetime
 import oracledb
 import pyodbc
-from script.utils.loggingSetup import log_error, log_info, log_warning
+from script.utils.loggingSetup import log_error, log_info, log_warning, log_debug
 from script.utils.create_directory import create_directory
 import csv
 import shutil
@@ -56,6 +56,7 @@ class OraclePipeline:
     #function that connects to mssql db and gets the last update date from the table LastUpdate
     def get_last_update_date(self):
         try:
+            log_info(f'Getting last update date from table LastUpdate for table {self.table_name}')
             cursor = self.mssql_conn.cursor()
             #get last update date from table LastUpdate
             cursor.execute(f"SELECT * FROM LastUpdate WHERE TableName = '{self.table_name}'")
@@ -111,6 +112,7 @@ class OraclePipeline:
 
             
             #save data to csv in raw folder
+            
             log_info(f'Saving data to csv in raw folder: {raw_path_file}')
             with open(raw_path_file, 'w+', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
@@ -135,6 +137,8 @@ class OraclePipeline:
             with open(table_info_file, 'w+', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 #create array of header names
+
+                
                 headers = []
                 for column in table_info_columns:
                     headers.append(column[0])
@@ -165,32 +169,41 @@ class OraclePipeline:
         
     #function that loads the data to mssql
     def load(self, transformed_file_path):
+        #create table in mssql if it doesn't exist
         self.create_table()
 
 
 
     #function that creates a table in mssql based on the table info from oracle, if the table does not already exist, if it exists, it alters it if the structure changed
     def create_table(self):
+        #function to create DATA_TYPE_LENGTH_SCALE column from given dataframe
+        def create_data_type_length_scale_column(df):
+            df['DATA_TYPE_LENGTH_SCALE'] = np.where(df['DATA_TYPE'] == 'VARCHAR', df['DATA_TYPE'] + '(MAX)', np.where(df['DATA_TYPE'] == 'DECIMAL', df['DATA_TYPE'] + '(' + df['DATA_LENGTH'].astype(str) + ',' + df['DATA_SCALE'].astype(str) + ')', df['DATA_TYPE']))
+            #remove DATA_TYPE, DATA_LENGTH, DATA_SCALE columns
+            df = df.drop(columns=['DATA_TYPE', 'DATA_LENGTH', 'DATA_SCALE'])
+            return df
+
         try:
             #preparing dataframe
             #get table info from csv in table info folder
-            table_info_df = pd.read_csv(f'data/table_info/{self.table_name}/{self.table_name}_table_info.csv')
+            oracle_table_info_df = pd.read_csv(f'data/table_info/{self.table_name}/{self.table_name}_table_info_TEST.csv')
             #prepare table info for mssql
             #show table info
-            table_info_df['DATA_TYPE'] = table_info_df['DATA_TYPE'].str.replace('VARCHAR2', 'VARCHAR')
+            oracle_table_info_df['DATA_TYPE'] = oracle_table_info_df['DATA_TYPE'].str.replace('VARCHAR2', 'VARCHAR')
             #replace number with decimal
-            table_info_df['DATA_TYPE'] = table_info_df['DATA_TYPE'].str.replace('NUMBER', 'DECIMAL')
+            oracle_table_info_df['DATA_TYPE'] = oracle_table_info_df['DATA_TYPE'].str.replace('NUMBER', 'DECIMAL')
             #create new column with data type, length, and precision. If data type is varchar, add length in parenthesis after data type. If data type is number, add length and scale in parenthesis after data type, separated by comma, e.g. VARCHAR(50), NUMBER(10,2), if data type is date, add nothing
             #make data_scale to int (no decimals)
-            table_info_df['DATA_SCALE'] = table_info_df['DATA_SCALE'].fillna(0).astype(int)
-            table_info_df['DATA_TYPE_LENGTH_SCALE'] = np.where(table_info_df['DATA_TYPE'] == 'VARCHAR', table_info_df['DATA_TYPE'] + '(MAX)', np.where(table_info_df['DATA_TYPE'] == 'DECIMAL', table_info_df['DATA_TYPE'] + '(' + table_info_df['DATA_LENGTH'].astype(str) + ',' + table_info_df['DATA_SCALE'].astype(str) + ')', table_info_df['DATA_TYPE']))
-
+            oracle_table_info_df['DATA_SCALE'] = oracle_table_info_df['DATA_SCALE'].fillna(0).astype(int)
+            oracle_table_info_df = create_data_type_length_scale_column(oracle_table_info_df)
 
 
             #check if table already exists in mssql
             log_info(f'Checking if table {self.table_name} exists in mssql')
+            statement = f"SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{self.table_name}'"
+            log_debug(f'Statement: {statement}')
             mssql_cursor = self.mssql_conn.cursor()
-            mssql_cursor.execute(f"SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{self.table_name}'")
+            mssql_cursor.execute(statement)
             table_exists = mssql_cursor.fetchone()
 
 
@@ -198,14 +211,38 @@ class OraclePipeline:
             #if table exists, check if table structure is the same
             if table_exists:
                 log_info(f'Table {self.table_name} already exists in mssql, checking if strcuture is the same')
-                #check if table structure is the same
+                statement = f"SELECT COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{self.table_name}'"
                 #get table info from mssql
-                mssql_cursor.execute(f"SELECT COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{self.table_name}'")
+                log_debug(f'Statement: {statement}')
+                mssql_cursor.execute(statement)
                 mssql_table_info = mssql_cursor.fetchall()
                 #convert mssql_table_info to dataframe
                 mssql_table_info_df = pd.DataFrame.from_records(mssql_table_info, columns=['COLUMN_NAME', 'DATA_TYPE', 'DATA_LENGTH', 'DATA_SCALE'])
                 mssql_table_info_df['DATA_SCALE'] = mssql_table_info_df['DATA_SCALE'].fillna(0).astype(int)
                 mssql_table_info_df['DATA_LENGTH'] = mssql_table_info_df['DATA_LENGTH'].fillna(0).astype(int)
+                mssql_table_info_df['DATA_TYPE'] = mssql_table_info_df['DATA_TYPE'].str.upper()
+                mssql_table_info_df = create_data_type_length_scale_column(mssql_table_info_df)
+                #check if table info is the same
+                if oracle_table_info_df.equals(mssql_table_info_df):
+                    log_info(f'Table {self.table_name} structure is the same, no need to alter table')
+                    return 0 #return 0 if table structure is the same
+                else:
+                    log_info(f'Table {self.table_name} structure is different, altering table')
+                    #check which columns are different
+                    #get columns that are in oracle but not in mssql
+                    oracle_columns_not_in_mssql = oracle_table_info_df[~oracle_table_info_df['COLUMN_NAME'].isin(mssql_table_info_df['COLUMN_NAME'])]
+                    #prepare ALTER TABLE statement
+                    alter_table_statement = f'ALTER TABLE {self.table_name} '
+                    #add columns that are in oracle but not in mssql
+                    for index, row in oracle_columns_not_in_mssql.iterrows():
+                        alter_table_statement += f'ADD {row["COLUMN_NAME"]} {row["DATA_TYPE_LENGTH_SCALE"]},'
+                    #remove last comma
+                    alter_table_statement = alter_table_statement[:-1]
+                    log_debug(f'Alter table statement: {alter_table_statement}')
+                    #execute ALTER TABLE statement
+                    mssql_cursor.execute(alter_table_statement)
+                    self.mssql_conn.commit()
+
             else:
 
 
@@ -213,7 +250,7 @@ class OraclePipeline:
                 log_info(f'Table does not exist creating table {self.table_name} in mssql')
                 #create CREATE TABLE statement
                 create_table_statement = f'CREATE TABLE {self.table_name} ('
-                for index, row in table_info_df.iterrows():
+                for index, row in oracle_table_info_df.iterrows():
                     #if column is POSNR, add PRIMARY KEY
                     if row['COLUMN_NAME'] == 'POSNR':
                         create_table_statement += f'{row["COLUMN_NAME"]} {row["DATA_TYPE_LENGTH_SCALE"]} PRIMARY KEY,'
@@ -222,9 +259,12 @@ class OraclePipeline:
                 #remove last comma
                 create_table_statement = create_table_statement[:-1]
                 create_table_statement += ')'
+
+
                 #execute CREATE TABLE statement
                 mssql_cursor.execute(create_table_statement)
                 self.mssql_conn.commit()
+
         except Exception as e:
             log_error(f'Error creating table {self.table_name}: {e}')
             raise e
@@ -236,4 +276,3 @@ class OraclePipeline:
         transformed_path = self.transform(raw_path)
         self.load(transformed_path)
         self.set_last_update_date()
-

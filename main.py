@@ -37,6 +37,7 @@ if __name__ == "__main__":
 
 """
 
+setup_logger()
 artlif_pipeline = OraclePipeline()
 path = artlif_pipeline.extract()
 transformed_path = artlif_pipeline.transform(path)

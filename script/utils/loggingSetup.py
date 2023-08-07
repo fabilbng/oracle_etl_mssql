@@ -2,6 +2,8 @@ import logging
 import os
 import time
 
+#logging setup
+
 def setup_logger():
     #getting current time for logfile
     current_time = time.localtime()
