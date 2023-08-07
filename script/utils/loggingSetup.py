@@ -28,5 +28,8 @@ def log_error(message):
     logging.error(message)
 
 def log_warning(message):
-    print('Warning: ' + message)
+    print('WARNING: ' + message)
     logging.warning(message)
+
+def log_debug(message):
+    logging.debug(message)
