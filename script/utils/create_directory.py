@@ -1,5 +1,8 @@
 import os
-from script.utils.loggingSetup import log_error
+import logging
+
+# Create a logger
+logger = logging.getLogger(__name__)
 
 def create_directory(directory):
     try:
@@ -9,5 +12,5 @@ def create_directory(directory):
             return 1 
         return 0
     except Exception as e:
-        log_error(f'Error checking for directory: {e}')
+        logger.error(f'Error checking for directory: {e}')
         raise e
