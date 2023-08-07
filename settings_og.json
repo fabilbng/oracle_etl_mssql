@@ -1,0 +1,40 @@
+{
+    "tables": [
+        {
+            "name": "ARTDAT",
+            "exclude_columns" : []
+        },
+        {
+            "name": "ARTLIF",
+            "exclude_columns" : []
+        },
+        {
+            "name": "ARTSTL",
+            "exclude_columns" : []
+        },
+        {
+            "name": "BESDAT",
+            "exclude_columns" : []
+        },
+        {
+            "name": "BESPOS",
+            "exclude_columns" : []
+        },
+        {
+            "name": "LAGDAT",
+            "exclude_columns" : []
+        },
+        {
+            "name": "LIFDAT",
+            "exclude_columns" : []
+        },
+        {
+            "name": "ZBTAB2",
+            "exclude_columns" : [
+                "VARTEXT1",
+                "VARTEXT2",
+                "VARTEXT3"
+            ]
+        }
+    ]
+}

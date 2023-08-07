@@ -1,12 +1,12 @@
 {
     "tables": [
-        "ARTDAT",
-        "ARTLIF",
-        "ARTSTL",
-        "BESDAT",
-        "BESPOS",
-        "LAGDAT",
-        "LIFDAT",
-        "ZBTAB2"
+        {
+            "name": "ZBTAB2",
+            "exclude_columns" : [
+                "VARTEXT1",
+                "VARTEXT2",
+                "VARTEXT3"
+            ]
+        }
     ]
 }

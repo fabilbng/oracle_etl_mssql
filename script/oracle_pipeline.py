@@ -26,11 +26,12 @@ logger = logging.getLogger(__name__)
 #it has a method that extracts the data from the oracle db and a method that transforms the data
 #it has a method that loads the data into the mssql db
 class OraclePipeline:
-    def __init__(self, table_name='ARTLIF'):
+    def __init__(self):
         try:
             logger = logging.getLogger(__name__ + '.__init__')
             logger.info(f'Initializing OraclePipeline')
-            self.table_name = table_name
+            self.table_name = 'ARTLIF'
+            self.exclude_columns = []
             #timestamp of when the pipeline is run
             self.run_date = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             logger.info('Connecting to oracle database')
@@ -175,27 +176,50 @@ class OraclePipeline:
             logger.error(f'Error extracting from oracle db for table {self.table_name}: {e}')
             raise e
 
+
+
+
+
     #function that transforms the data
     def transform(self, raw_path):
         try:
             logger = logging.getLogger(__name__ + '.transform')
-            #create transformed folder if it doesn't exist
+            #if excluded columns is empty, run this code block
             transformed_path = f'data/transformed/{self.table_name}'
             create_directory(transformed_path)
             transformed_file_path = f'{transformed_path}/{self.table_name}_{self.run_date}_transformed.csv'
-            #logger.info(f'Transforming data from {raw_path} and saving it to {transformed_path_file}')
-            #tmove data from raw folder to transformed folder
-            shutil.move(raw_path, transformed_file_path)
-            return transformed_file_path
+            if not self.exclude_columns: 
+                #just move the raw to trasnformed folder to save space
+                shutil.move(raw_path, transformed_file_path)
+                return transformed_file_path
+            else:
+                #exclude columns from raw data
+                logger.info(f'Excluding columns {self.exclude_columns} from raw data')
+                #read csv to pandas dataframe
+                df = pd.read_csv(raw_path, sep=',', encoding='utf-8')
+                #drop excluded columns
+                df.drop(self.exclude_columns, axis=1, inplace=True)
+                #save to csv in transformed folder
+                logger.info(f'Saving transformed data to csv in transformed folder: {transformed_file_path}')
+                df.to_csv(transformed_file_path, index=False, encoding='utf-8')
+                return transformed_file_path
+
+
         except Exception as e:
             logger.error(f'Error transforming data for table {self.table_name}: {e}')
             raise e
-        
+
+
+
+
+
     #function that loads the data to mssql
     def load(self, transformed_file_path):
         try:
             logger = logging.getLogger(__name__ + '.load')
             logger.info('Loading data to MSSQL DB')
+
+
             #create table in mssql if it doesn't exist
             #val not being used 0 options: 0 = table already exists, 1 = altered, 2 = created
             val = self.create_table()
@@ -378,10 +402,11 @@ class OraclePipeline:
 
 
     #running entire pipeline
-    def run_pipeline(self, table_name):
+    def run_pipeline(self, table_name, exclude_columns=[]):
         try:
             #setting table name
             self.table_name = table_name
+            self.exclude_columns = exclude_columns
             raw_path = self.extract()
             transformed_path = self.transform(raw_path)
             self.load(transformed_path)
