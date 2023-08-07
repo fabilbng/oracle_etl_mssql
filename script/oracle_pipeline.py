@@ -60,8 +60,12 @@ class OraclePipeline:
             cursor = self.mssql_conn.cursor()
             #get last update date from table LastUpdate
             cursor.execute(f"SELECT * FROM LastUpdate WHERE TableName = '{self.table_name}'")
-            last_update_date = cursor.fetchone()[2]
-            #convert last update date to datetime object
+            #check if result is empty
+            if cursor.rowcount == 0:
+                self.set_last_update_date(new = 1)
+                last_update_date = '2000-01-01'
+            else:
+                last_update_date = cursor.fetchone()[2]
             return last_update_date
         except Exception as e:
             log_error(f'Error getting last update date from table LastUpdate: {e}')
@@ -69,15 +73,25 @@ class OraclePipeline:
 
 
 
-    #function that connects to mssql db and updates the last update date in the table LastUpdate
-    def set_last_update_date(self):
+    #function that checks last update on on LastUpdate Table
+    def set_last_update_date(self, new = 0):
+        mssql_cursor = self.mssql_conn.cursor()
         try:
-            mssql_cursor = self.mssql_conn.cursor()
-            #get current time
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            #update last update date in table LastUpdate
-            mssql_cursor.execute(f"UPDATE LastUpdate SET LastUpdate = '{current_date}' WHERE TableName = '{self.table_name}'")
-            self.mssql_conn.commit()
+            if new:
+                log_info('New table detected')
+                log_info(f'Inserting new row in table LastUpdate for table {self.table_name}')
+                #insert new row with current table name and data 2000-01-01
+                statement = f"INSERT INTO LastUpdate VALUES('{self.table_name}', '2000-01-01')"
+                log_debug(f'Statement: {statement}')
+                mssql_cursor.execute(statement)
+                self.mssql_conn.commit()
+            else: 
+                
+                #get current time
+                current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+                #update last update date in table LastUpdate
+                mssql_cursor.execute(f"UPDATE LastUpdate SET Date = '{current_date}' WHERE TableName = '{self.table_name}'")
+                self.mssql_conn.commit()
         except Exception as e:
             log_error(f'Error setting last update date in table LastUpdate: {e}')
             raise e
@@ -271,7 +285,7 @@ class OraclePipeline:
         try:
             #preparing dataframe
             #get table info from csv in table info folder
-            oracle_table_info_df = pd.read_csv(f'data/table_info/{self.table_name}/{self.table_name}_table_info.csv')
+            oracle_table_info_df = pd.read_csv(f'data/table_info/{self.table_name}/{self.table_name}_oracle_table_info.csv')
             #prepare table info for mssql
             #show table info
             oracle_table_info_df['DATA_TYPE'] = oracle_table_info_df['DATA_TYPE'].str.replace('VARCHAR2', 'VARCHAR')
@@ -357,8 +371,10 @@ class OraclePipeline:
             raise e
 
 
-
-    def run(self):
+    #running entire pipeline
+    def run_pipeline(self, table_name):
+        #setting table name
+        self.table_name = table_name
         raw_path = self.extract()
         transformed_path = self.transform(raw_path)
         self.load(transformed_path)
