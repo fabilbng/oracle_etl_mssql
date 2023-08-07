@@ -1,0 +1,12 @@
+{
+    "tables": [
+        "ARTDAT",
+        "ARTLIF",
+        "ARTSTL",
+        "BESDAT",
+        "BESPOS",
+        "LAGDAT",
+        "LIFDAT",
+        "ZBTAB2"
+    ]
+}

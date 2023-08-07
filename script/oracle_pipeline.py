@@ -172,7 +172,7 @@ class OraclePipeline:
 
             return raw_path_file
         except Exception as e:
-            logger.error(f'Error extracting data from oracle database for table {self.table_name}: {e}')
+            logger.error(f'Error extracting from oracle db for table {self.table_name}: {e}')
             raise e
 
     #function that transforms the data
@@ -373,6 +373,8 @@ class OraclePipeline:
         except Exception as e:
             logger.error(f'Error creating table {self.table_name}: {e}')
             raise e
+
+
 
 
     #running entire pipeline
