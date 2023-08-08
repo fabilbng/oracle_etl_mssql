@@ -1,4 +1,4 @@
-
+from dotenv import load_dotenv
 from script.oracle_pipeline import OraclePipeline
 import logging
 import datetime
@@ -33,6 +33,9 @@ def main():
     logger.addHandler(file_handler_normal)
     logger.addHandler(stream_handler)
     logger.addHandler(file_handler_detailed)
+
+    #dotenv
+    load_dotenv()
 
     try:
         #read settings json from root directory

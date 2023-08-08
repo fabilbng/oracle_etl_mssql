@@ -1,4 +1,3 @@
-from dotenv import load_dotenv
 import os
 import pandas as pd
 import datetime
@@ -10,7 +9,7 @@ import shutil
 import numpy as np
 import logging
 
-load_dotenv()
+
 oracle_db = os.getenv('ORACLE_DB')
 oracle_un = os.getenv('ORACLE_UN')
 oracle_pw = os.getenv('ORACLE_PW')
