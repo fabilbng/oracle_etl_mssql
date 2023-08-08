@@ -1,9 +1,9 @@
-from script.utils.baseClasses import OracleDBConnector
 from script.utils.loggingSetup import log_error, log_info, log_warning
 import os
 from dotenv import load_dotenv
 import csv
 import time
+import oracledb
 
 #load environment variables and set
 load_dotenv()
@@ -12,7 +12,7 @@ oracle_un = os.getenv('ORACLE_UN')
 oracle_pw = os.getenv('ORACLE_PW')
 
 #function to get data from oracle db and save to csv
-def extract(table_name):
+def extract(table_name, entry_date='2023-01-01'):
     try:
         log_info('Extracting data from Oracle DB')
 
@@ -29,11 +29,13 @@ def extract(table_name):
 
 
         #connect to oracle db
-        oracle_db_conn = OracleDBConnector(oracle_db, oracle_un, oracle_pw)
-        oracle_cursor = oracle_db_conn.oracle_cursor
+        log_info('Connecting to Oracle DB')
+        oracle_conn = oracledb.connect(user=oracle_un, password=oracle_pw, dsn=oracle_db)
+        oracle_cursor = oracle_conn.cursor()
+        log_info(f'Successfully connected to Oracle DB {oracle_db}')
 
-        #get data from oracle db
-        oracle_cursor.execute(f'SELECT * FROM {table_name}')
+        #get data from oracle db where A_DATE >= entry_date
+        oracle_cursor.execute(f'SELECT * FROM {table_name} WHERE A_DATE >= TO_DATE(\'{entry_date}\', \'YYYY-MM-DD\')')
         data = oracle_cursor.fetchall()
 
         #save data to csv in raw folder

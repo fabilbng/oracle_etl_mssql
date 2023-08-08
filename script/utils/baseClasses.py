@@ -4,6 +4,7 @@ import pyodbc
 import oracledb
 from script.utils.loggingSetup import log_error, log_info, log_warning
 
+#NOT USED ANYMORE
 
 
 

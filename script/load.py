@@ -1,8 +1,11 @@
 from script.utils.loggingSetup import log_error, log_info, log_warning
 import os
 from dotenv import load_dotenv
-from script.utils.baseClasses import MSSQLConnector
+import pyodbc
 import pandas as pd
+import pyodbc
+import csv
+import time
 
 #load environment variables and set mssql-variables
 load_dotenv()
@@ -15,65 +18,76 @@ env = os.getenv('ENV')
 
 
 def load_to_mssql_variable_columns(transformed_path, table_name):
-    """
-    #creat sqlalchemy engine, using sqlalchemy since it is easier to load data to mssql table
-    if env == 'dev':
-        engine = sqlalchemy.create_engine(f'mssql+pyodbc://{mssql_dbs}/{mssql_db}?driver=SQL+Server')
-    elif env == 'prod':
-        engine = sqlalchemy.create_engine(f'mssql+pyodbc://{mssql_un}:{mssql_pw}@{mssql_dbs}/{mssql_db}?driver=SQL+Server')
-    """
-    
     #loading data to mssql table, table name must be given, columns are variable depending on csv format
     try:
         log_info('Loading data to MSSQL DB')
-
-        #read csv to pandas dataframe
-        df = pd.read_csv(transformed_path, sep=',', encoding='utf-8', engine='python')
-
-        #connect to mssql db
+        #get current time for csv name
+        current_time = time.strftime("%Y%d%m_%H%M%S")
+        #connect to mssql db without MSSQLConnector class
         if env == 'dev':
-            mssql_db_conn = MSSQLConnector(mssql_dbs, mssql_db, mssql_un, mssql_pw, trusted=1)
+            mssql_db_conn = pyodbc.connect(f'DRIVER=SQL Server;SERVER={mssql_dbs};DATABASE={mssql_db};trusted=1')
         elif env == 'prod':
-            mssql_db_conn = MSSQLConnector(mssql_dbs, mssql_db, mssql_un, mssql_pw, trusted=0)
+            mssql_db_conn = pyodbc.connect(f'DRIVER=SQL Server;SERVER={mssql_dbs};DATABASE={mssql_db};UID={mssql_un};PWD={mssql_pw}')
         else:
             raise ValueError('Wrong value given for env (either dev or prod)')
         
-        mssql_cursor = mssql_db_conn.mssql_cursor
+        mssql_cursor = mssql_db_conn.cursor()
 
+        #read csv to pandas dataframe
+        df = pd.read_csv(transformed_path, sep=',', encoding='utf-8', engine='python')
+        #create directory in loaded folder with table_name if it does not exist
+        if not os.path.exists(f'data/loaded/{table_name}'):
+            os.makedirs(f'data/loaded/{table_name}')
 
-
-        #check if table exists, if table exists, check if columns match csv columns
-        mssql_cursor.execute(f"SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{table_name}'")
-        if mssql_cursor.fetchone() is not None:
-            mssql_cursor.execute(f"SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table_name}'")
-            columns = mssql_cursor.fetchall()
-            columns = [column[3] for column in columns]
-            if columns != list(df.columns):
-                log_warning(f'Columns in csv do not match columns in table {table_name}')
-                #alter table to match csv columns
-                for column in df.columns:
-                    if column not in columns:
-                        #TODO: find a way to get correct data type from pandas dataframe
-                        mssql_cursor.execute(f"ALTER TABLE {table_name} ADD {column} VARCHAR(255)")
-                        log_info(f'Added column {column} to table {table_name}')
-            else:
-                log_info(f'Columns in csv match columns in table {table_name}')
-        else:
-            #create table with columns from csv
-            #TODO: imlement function to create table with correct data types
-            log_warning(f'Table {table_name} does not exist')
-            #temporary exception 
-            raise Exception('Table {table_name} does not exist')
         
         #load data to mssql table
         #TODO: try using pandas to_sql function, rn not working due to precision error
         for index, row in df.iterrows():
-            mssql_cursor.execute(f"INSERT INTO {table_name} VALUES ({','.join(['?']*len(row))})", row)
-        
+            #get string of values from row, if value is nan, replace with None
+            #TODO: find alternative way to load data to mssql table
+            string = ''
+            for value in row:
+                if pd.isna(value):
+                    string += 'NULL, '
+                else:
+                    string += f"'{value}', "
+            string = string[:-2]
+
+            #check if row already exists in table, POSNR is primary Key
+            mssql_cursor.execute(f"SELECT * FROM {table_name} WHERE POSNR = '{row['POSNR']}'")
+            if mssql_cursor.fetchone() is not None:
+                #if row exists, update row
+                log_info(f'Row with POSNR {row["POSNR"]} already exists..')
+            else:
+                try:
+
+                    #if row does not exist, insert row
+                    log_info(f'Row with POSNR {row["POSNR"]} does not exist, inserting')
+                    prepared_statement = f"INSERT INTO {table_name} VALUES ({string})"
+                    mssql_cursor.execute(prepared_statement)
+                    #commit changes to mssql db
+                    mssql_db_conn.commit()
+
+                    #save row to csv in loaded folder, csv name with timestamp
+                    with open(f'data/loaded/{table_name}/{table_name}_{current_time}.csv', 'a+', newline='', encoding='utf-8') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(row)
 
 
+                except pyodbc.ProgrammingError as e:
+                    log_error(f'Error loading data to MSSQL DB: {e}')
+                    #if insert fails, save row to csv in failed_inserts folder
+                    #create failed_inserts folder in table_name_folder if it does not exist
+                    if not os.path.exists(f'data/loaded/{table_name}/failed_inserts'):
+                        os.makedirs(f'data/loaded/{table_name}/failed_inserts')
+                    #save failed row to csv in failed_inserts folder
+                    with open(f'data/loaded/{table_name}/failed_inserts/{table_name}_{current_time}_failed_inserts.csv', 'a+', newline='', encoding='utf-8') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(row)
 
 
+        #close connection
+        mssql_db_conn.close()
         log_info('Data successfully loaded to MSSQL DB')
     except Exception as e:
         log_error(f'Error loading data to MSSQL DB: {e}')
