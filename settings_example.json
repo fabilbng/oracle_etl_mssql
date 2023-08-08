@@ -1,0 +1,24 @@
+{
+    "tables": [
+        {
+            "name": "Table1",
+            "exclude_columns" : []
+        },
+        {
+            "name": "Table2",
+            "exclude_columns" : []
+        },
+        {
+            "name": "Table3",
+            "exclude_columns" : []
+        },
+        {
+            "name": "Table4",
+            "exclude_columns" : [
+                "Column1",
+                "Column2",
+                "Column3"
+            ]
+        }
+    ]
+}
