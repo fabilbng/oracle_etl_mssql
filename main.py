@@ -42,12 +42,16 @@ def main():
         logger.error(f'Error reading settings.json: {e}')
         sys.exit('Error reading settings.json')
 
-    tables = settings['tables']
+    #get array of tables from settings, settings has array of dictionaries with table "name" and "exclude_columns"
+    tables = [table['name'] for table in settings['tables']]
+    logger.info(f'Tables to run: {tables}')
+
     pipeline = OraclePipeline()
     for table in tables:
         try:
+            exclude_columns = settings['tables'][tables.index(table)]['exclude_columns']
             logger.info(f'Running pipeline for table {table}')
-            pipeline.run_pipeline(table)
+            pipeline.run_pipeline(table_name=table, exclude_columns=exclude_columns)
         except Exception as e:
             logger.error(f'Error running pipeline for table {table}: {e}')
 
