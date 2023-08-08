@@ -21,10 +21,7 @@ mssql_pw = os.getenv('MSSQL_PW')
 env = os.getenv('ENV')
 logger = logging.getLogger(__name__)
 
-#class that takes in a table name, it initiliazes itself by connecting to the mssql db and oracle db 
-#it has a method that gets the last update date from the mssql db and a method that sets the last update date in the mssql db
-#it has a method that extracts the data from the oracle db and a method that transforms the data
-#it has a method that loads the data into the mssql db
+
 class OraclePipeline:
     def __init__(self):
         try:
