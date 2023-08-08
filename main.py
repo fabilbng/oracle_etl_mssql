@@ -34,8 +34,6 @@ def main():
     logger.addHandler(stream_handler)
     logger.addHandler(file_handler_detailed)
 
-    #dotenv
-    load_dotenv()
 
     try:
         #read settings json from root directory

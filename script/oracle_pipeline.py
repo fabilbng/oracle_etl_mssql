@@ -8,8 +8,11 @@ import csv
 import shutil
 import numpy as np
 import logging
+from dotenv import load_dotenv
 
 
+#dotenv
+load_dotenv()
 oracle_db = os.getenv('ORACLE_DB')
 oracle_un = os.getenv('ORACLE_UN')
 oracle_pw = os.getenv('ORACLE_PW')
@@ -24,10 +27,11 @@ logger = logging.getLogger(__name__)
 class OraclePipeline:
     def __init__(self):
         try:
-            logger = logging.getLogger(__name__ + '.__init__')
-            logger.info(f'Initializing OraclePipeline')
             self.table_name = 'ARTLIF'
             self.exclude_columns = []
+
+            logger = logging.getLogger(__name__ + '.__init__')
+            logger.info(f'Initializing OraclePipeline')
             #timestamp of when the pipeline is run
             self.run_date = datetime.datetime.now().strftime('%Y%d%m_%H%M%S')
             logger.info('Connecting to oracle database')
@@ -54,7 +58,7 @@ class OraclePipeline:
     #function that connects to mssql db and gets the last update date from the table LastUpdate
     def get_last_update_date(self):
         try:
-            logger = logging.getLogger(__name__ + '.get_last_update_date')
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.get_last_update_date')
             logger.info(f'Getting last update date from table LastUpdate for table {self.table_name}')
             cursor = self.mssql_conn.cursor()
             #get last update date from table LastUpdate
@@ -75,7 +79,7 @@ class OraclePipeline:
     #function that checks last update on on LastUpdate Table
     def set_last_update_date(self, new = 0):
         try:
-            logger = logging.getLogger(__name__ + '.set_last_update_date')
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.set_last_update_date')
             mssql_cursor = self.mssql_conn.cursor()
             if new:
                 logger.info('New table detected')
@@ -102,7 +106,7 @@ class OraclePipeline:
     #function that gets the the data from the oracle db and table info from oracle
     def extract(self):
         try:
-            logger = logging.getLogger(__name__ + '.extract')
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.extract')
             cursor = self.oracle_conn.cursor()
             entry_date = self.get_last_update_date()
             #get data from oracle db where A_DATE >= entry_date
@@ -179,7 +183,7 @@ class OraclePipeline:
     #function that transforms the data
     def transform(self, raw_path):
         try:
-            logger = logging.getLogger(__name__ + '.transform')
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.transform')
             #if excluded columns is empty, run this code block
             transformed_path = f'data/transformed/{self.table_name}'
             create_directory(transformed_path)
@@ -212,7 +216,7 @@ class OraclePipeline:
     #function that loads the data to mssql
     def load(self, transformed_file_path):
         try:
-            logger = logging.getLogger(__name__ + '.load')
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.load')
             logger.info('Loading data to MSSQL DB')
 
 
@@ -306,7 +310,7 @@ class OraclePipeline:
             return df
 
         try:
-            logger = logging.getLogger(__name__ + '.create_table')
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.create_table')
             #preparing dataframe
             #get table info from csv in table info folder
             oracle_table_info_df = pd.read_csv(f'data/table_info/{self.table_name}/{self.table_name}_oracle_table_info.csv')
@@ -398,7 +402,7 @@ class OraclePipeline:
 
 
     #running entire pipeline
-    def run_pipeline(self, table_name, exclude_columns=[]):
+    def run_pipeline(self, table_name, exclude_columns = [] ):
         try:
             #setting table name
             self.table_name = table_name
