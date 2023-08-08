@@ -88,25 +88,32 @@ class OraclePipeline:
     #function that gets the the data from the oracle db and table info from oracle
     def extract(self):
         try:
+            
+
             cursor = self.oracle_conn.cursor()
             entry_date = self.get_last_update_date()
             #get data from oracle db where A_DATE >= entry_date
             log_info(f'Getting data from oracle db where A_DATE >= {entry_date}')
-            cursor.execute(f'SELECT * FROM DSPJTENERGY.{self.table_name} WHERE A_DATE >= TO_DATE(\'{entry_date}\', \'YYYY-MM-DD\')')
+            statement = f'SELECT * FROM DSPJTENERGY.{self.table_name} WHERE A_DATE >= TO_DATE(\'{entry_date}\', \'YYYY-MM-DD\')'
+            log_debug(f'Statement: {statement}')
+            cursor.execute(statement)
             data = cursor.fetchall()
             data_columns = cursor.description
 
-            #get table info from oracle
+
             #get table info from oracle db
             log_info(f'Getting table info from oracle db for {self.table_name}')
-            cursor.execute(f"SELECT column_name,data_type, data_length, data_scale FROM all_tab_cols WHERE TABLE_NAME = '{self.table_name}' AND OWNER = 'DSPJTENERGY' AND HIDDEN_COLUMN = 'NO'")
+            statement = f"SELECT column_name,data_type, data_length, data_scale FROM all_tab_cols WHERE TABLE_NAME = '{self.table_name}' AND OWNER = 'DSPJTENERGY' AND HIDDEN_COLUMN = 'NO'"
+            log_debug(f'Statement: {statement}')
+            cursor.execute(statement)
             table_info = cursor.fetchall()
             table_info_columns = cursor.description
 
 
+            
             #create raw folder if it doesn't exist
             raw_path = f'data/raw/{self.table_name}'
-            create_directory(raw_path)
+            created = create_directory(raw_path)
             #raw path file: table name + timestamp + .csv
             raw_path_file = f'{raw_path}/{self.table_name}_{self.run_date}.csv'
 
@@ -129,7 +136,7 @@ class OraclePipeline:
             #create table info folder if it doesn't exist
             table_info_path = f'data/table_info/{self.table_name}'
             create_directory(table_info_path)
-            table_info_file = f'{table_info_path}/{self.table_name}_table_info.csv'
+            table_info_file = f'{table_info_path}/{self.table_name}_oracle_table_info.csv'
 
 
             #save table info to csv in raw folder
@@ -170,7 +177,85 @@ class OraclePipeline:
     #function that loads the data to mssql
     def load(self, transformed_file_path):
         #create table in mssql if it doesn't exist
-        self.create_table()
+        #loading data to mssql table, table name must be given, columns are variable depending on csv format
+        try:
+            log_info('Loading data to MSSQL DB')
+            #val not being used 0 options: 0 = table already exists, 1 = altered, 2 = created
+            val = self.create_table()
+            mssql_cursor = self.mssql_conn.cursor()
+
+            #read csv to pandas dataframe
+            loaded_path = f'data/loaded/{self.table_name}'
+            loaded_file_path = f'{loaded_path}/{self.table_name}_{self.run_date}_loaded.csv'
+            data_df = pd.read_csv(transformed_file_path, sep=',', encoding='utf-8', engine='python')
+            #create directory in loaded folder with table_name if it does not exist, 1 if created, 0 if already exists
+            created = create_directory(loaded_path)
+
+            #get headers from csv
+            headers = list(data_df.columns.values)
+            #prepare headers for sql statement
+            headers_string = ''
+            for header in headers:
+                headers_string += f'{header}, '
+            headers_string = headers_string[:-2]
+            #prepare statement
+            prepared_statement = f"INSERT INTO {self.table_name} ({headers_string}) "
+          
+            #load data to mssql table
+            for index, row in data_df.iterrows():
+                #get string of values from row, if value is nan, replace with None
+                string = ''
+                for value in row:
+                    if pd.isna(value):
+                        string += 'NULL, '
+                    else:
+                        string += f"'{value}', "
+                string = string[:-2]
+
+                #check if row already exists in table, POSNR is primary Key
+                statement = f"SELECT * FROM {self.table_name} WHERE POSNR = '{row['POSNR']}'"
+                log_info(f'Checking if row with POSNR {row["POSNR"]} already exists..')
+                log_debug(f'Statement: {statement}')
+                mssql_cursor.execute(statement)
+
+                if mssql_cursor.fetchone() is not None:
+                    #if row exists
+                    log_warning(f'Row with POSNR {row["POSNR"]} already exists..')
+                else:
+                    try:
+
+                        #if row does not exist, insert row
+                        log_info(f'Row with POSNR {row["POSNR"]} does not exist, inserting..')
+                        prepared_statement_final = f"{prepared_statement} VALUES ({string})"
+                        log_debug(f'Prepared statement: {prepared_statement_final}')
+                        mssql_cursor.execute(prepared_statement_final)
+                        #commit changes to mssql db
+                        self.mssql_conn.commit()
+
+                        #save row to csv in loaded folder, csv name with timestamp
+                        with open(loaded_file_path, 'a+', newline='', encoding='utf-8') as f:
+                            writer = csv.writer(f)
+                            writer.writerow(row)
+
+
+                    except pyodbc.Error as e:
+                        log_error(f'Error loading row to MSSQL DB, inserting in failed csv: {e}')
+                        #if insert fails, save row to csv in failed_inserts folder
+                        #create failed_inserts folder in table_name_folder if it does not exist
+                        failed_loaded_path = f'data/loaded/{self.table_name}/failed_inserts'
+                        failed_loaded_file_path = f'{failed_loaded_path}/{self.table_name}_{self.run_date}_failed_inserts.csv'
+                        created = create_directory(failed_loaded_path)
+                        #save failed row to csv in failed_inserts folder
+                        with open(failed_loaded_file_path, 'a+', newline='', encoding='utf-8') as f:
+                            writer = csv.writer(f)
+                            writer.writerow(row)
+
+
+            log_info('Data successfully loaded to MSSQL DB')
+        except Exception as e:
+            log_error(f'Error loading data to MSSQL DB: {e}')
+            raise e
+
 
 
 
@@ -186,7 +271,7 @@ class OraclePipeline:
         try:
             #preparing dataframe
             #get table info from csv in table info folder
-            oracle_table_info_df = pd.read_csv(f'data/table_info/{self.table_name}/{self.table_name}_table_info_TEST.csv')
+            oracle_table_info_df = pd.read_csv(f'data/table_info/{self.table_name}/{self.table_name}_table_info.csv')
             #prepare table info for mssql
             #show table info
             oracle_table_info_df['DATA_TYPE'] = oracle_table_info_df['DATA_TYPE'].str.replace('VARCHAR2', 'VARCHAR')
@@ -242,6 +327,7 @@ class OraclePipeline:
                     #execute ALTER TABLE statement
                     mssql_cursor.execute(alter_table_statement)
                     self.mssql_conn.commit()
+                    return 1 #return 1 if table structure is different
 
             else:
 
@@ -264,6 +350,7 @@ class OraclePipeline:
                 #execute CREATE TABLE statement
                 mssql_cursor.execute(create_table_statement)
                 self.mssql_conn.commit()
+                return 2 #return 2 if table is created
 
         except Exception as e:
             log_error(f'Error creating table {self.table_name}: {e}')
