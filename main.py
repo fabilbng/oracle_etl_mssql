@@ -4,7 +4,7 @@ import logging
 import datetime
 import json
 import sys
-
+from script.utils.create_directory import create_directory
 
 
 def main():
@@ -16,6 +16,7 @@ def main():
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     # Create a file handler
+    create_directory('logs')
     timestamp = datetime.datetime.now().strftime('%Y-%d-%m_%H-%M-%S')
     file_handler_normal = logging.FileHandler(f'logs/logfile_{timestamp}_normal.log')
     file_handler_normal.setLevel(logging.INFO)  # Set the desired level for the file handler
