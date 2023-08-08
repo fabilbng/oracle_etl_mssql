@@ -2,6 +2,8 @@
 from script.oracle_pipeline import OraclePipeline
 import logging
 import datetime
+import json
+import sys
 
 
 
@@ -15,9 +17,12 @@ def main():
 
     # Create a file handler
     timestamp = datetime.datetime.now().strftime('%Y-%d-%m_%H-%M-%S')
-    file_handler = logging.FileHandler(f'logs/logfile_{timestamp}.log')
-    file_handler.setLevel(logging.DEBUG)  # Set the desired level for the file handler
-    file_handler.setFormatter(formatter)
+    file_handler_normal = logging.FileHandler(f'logs/logfile_{timestamp}_normal.log')
+    file_handler_normal.setLevel(logging.INFO)  # Set the desired level for the file handler
+    file_handler_normal.setFormatter(formatter)
+    file_handler_detailed = logging.FileHandler(f'logs/logfile_{timestamp}_detailed.log')
+    file_handler_detailed.setLevel(logging.DEBUG)  # Set the desired level for the file handler
+    file_handler_detailed.setFormatter(formatter)
 
     # Create a stream handler (for command line output)
     stream_handler = logging.StreamHandler()
@@ -25,14 +30,26 @@ def main():
     stream_handler.setFormatter(formatter)
 
     # Add handlers to the logger
-    logger.addHandler(file_handler)
+    logger.addHandler(file_handler_normal)
     logger.addHandler(stream_handler)
+    logger.addHandler(file_handler_detailed)
 
+    try:
+        #read settings json from root directory
+        with open('settings.json') as json_file:
+            settings = json.load(json_file)
+    except Exception as e:
+        logger.error(f'Error reading settings.json: {e}')
+        sys.exit('Error reading settings.json')
 
+    tables = settings['tables']
+    pipeline = OraclePipeline()
+    for table in tables:
+        try:
+            logger.info(f'Running pipeline for table {table}')
+            pipeline.run_pipeline(table)
+        except Exception as e:
+            logger.error(f'Error running pipeline for table {table}: {e}')
 
-    logger.info('Starting script..')
-    Pipeline = OraclePipeline()
-    Pipeline.run_pipeline('BESDAT')
-
-
-main()
+if __name__ == '__main__':
+    main()
