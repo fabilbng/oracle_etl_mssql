@@ -28,6 +28,8 @@
         ]
     }
 
+**Run main.py from root directory**
+
 
 **Exclude Columns Description:** If the array includes column names, the script will still fetch it from the oracle db and safe it in the raw folder. During the transform step, the script will remove these columns from the dataset and safe it in the transformed path, so they won't be inserted in the load step. 
 
@@ -43,3 +45,4 @@ The columns will still be there on the mssql table as the table synchronisation 
     - some file paths are duplicate/not saved in variables causing troubles when editing the code
 - implement tests
 - setup LastUpdate Table so that it automatically gets created if it's missing 
+
