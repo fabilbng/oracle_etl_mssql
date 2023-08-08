@@ -4,11 +4,11 @@ import pandas as pd
 import datetime
 import oracledb
 import pyodbc
-from script.utils.loggingSetup import log_error, log_info, log_warning, log_debug
 from script.utils.create_directory import create_directory
 import csv
 import shutil
 import numpy as np
+import logging
 
 load_dotenv()
 oracle_db = os.getenv('ORACLE_DB')
@@ -19,7 +19,7 @@ mssql_db = os.getenv('MSSQL_DB')
 mssql_un = os.getenv('MSSQL_UN')
 mssql_pw = os.getenv('MSSQL_PW')
 env = os.getenv('ENV')
-
+logger = logging.getLogger(__name__)
 
 #class that takes in a table name, it initiliazes itself by connecting to the mssql db and oracle db 
 #it has a method that gets the last update date from the mssql db and a method that sets the last update date in the mssql db
@@ -28,14 +28,15 @@ env = os.getenv('ENV')
 class OraclePipeline:
     def __init__(self, table_name='ARTLIF'):
         try:
-            log_info(f'Initializing OraclePipeline')
+            logger = logging.getLogger(__name__ + '.__init__')
+            logger.info(f'Initializing OraclePipeline')
             self.table_name = table_name
             #timestamp of when the pipeline is run
             self.run_date = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            log_info('Connecting to oracle database')
+            logger.info('Connecting to oracle database')
             self.oracle_conn = oracledb.connect(user=oracle_un, password=oracle_pw, dsn=oracle_db)
 
-            log_info('Connecting to mssql database')
+            logger.info('Connecting to mssql database')
             connect_string_2  = f'DRIVER=SQL Server;SERVER={mssql_dbs};DATABASE={mssql_db};UID={mssql_un};PWD={mssql_pw}'
             connect_string_1 = f'DRIVER=SQL Server;SERVER={mssql_dbs};DATABASE={mssql_db};trusted=1'
             if env == 'dev':
@@ -46,17 +47,18 @@ class OraclePipeline:
                 raise ValueError('Wrong value given for env (either dev or prod)')
 
             #creating neccessary folders
-            log_info('Creating neccessary folders')
+            logger.info('Creating neccessary folders')
 
         except Exception as e:
-            log_error(f'Error initializing OraclePipeline: {e}')
+            logger.error(f'Error initializing OraclePipeline: {e}')
             raise e    
 
 
     #function that connects to mssql db and gets the last update date from the table LastUpdate
     def get_last_update_date(self):
         try:
-            log_info(f'Getting last update date from table LastUpdate for table {self.table_name}')
+            logger = logging.getLogger(__name__ + '.get_last_update_date')
+            logger.info(f'Getting last update date from table LastUpdate for table {self.table_name}')
             cursor = self.mssql_conn.cursor()
             #get last update date from table LastUpdate
             cursor.execute(f"SELECT * FROM LastUpdate WHERE TableName = '{self.table_name}'")
@@ -68,21 +70,22 @@ class OraclePipeline:
                 last_update_date = cursor.fetchone()[2]
             return last_update_date
         except Exception as e:
-            log_error(f'Error getting last update date from table LastUpdate: {e}')
+            logger.error(f'Error getting last update date from table LastUpdate: {e}')
             raise e
 
 
 
     #function that checks last update on on LastUpdate Table
     def set_last_update_date(self, new = 0):
-        mssql_cursor = self.mssql_conn.cursor()
         try:
+            logger = logging.getLogger(__name__ + '.set_last_update_date')
+            mssql_cursor = self.mssql_conn.cursor()
             if new:
-                log_info('New table detected')
-                log_info(f'Inserting new row in table LastUpdate for table {self.table_name}')
+                logger.info('New table detected')
+                logger.info(f'Inserting new row in table LastUpdate for table {self.table_name}')
                 #insert new row with current table name and data 2000-01-01
                 statement = f"INSERT INTO LastUpdate VALUES('{self.table_name}', '2000-01-01')"
-                log_debug(f'Statement: {statement}')
+                logger.debug(f'Statement: {statement}')
                 mssql_cursor.execute(statement)
                 self.mssql_conn.commit()
             else: 
@@ -93,7 +96,7 @@ class OraclePipeline:
                 mssql_cursor.execute(f"UPDATE LastUpdate SET Date = '{current_date}' WHERE TableName = '{self.table_name}'")
                 self.mssql_conn.commit()
         except Exception as e:
-            log_error(f'Error setting last update date in table LastUpdate: {e}')
+            logger.error(f'Error setting last update date in table LastUpdate: {e}')
             raise e
 
 
@@ -102,23 +105,22 @@ class OraclePipeline:
     #function that gets the the data from the oracle db and table info from oracle
     def extract(self):
         try:
-            
-
+            logger = logging.getLogger(__name__ + '.extract')
             cursor = self.oracle_conn.cursor()
             entry_date = self.get_last_update_date()
             #get data from oracle db where A_DATE >= entry_date
-            log_info(f'Getting data from oracle db where A_DATE >= {entry_date}')
+            logger.info(f'Getting data from oracle db where A_DATE >= {entry_date}')
             statement = f'SELECT * FROM DSPJTENERGY.{self.table_name} WHERE A_DATE >= TO_DATE(\'{entry_date}\', \'YYYY-MM-DD\')'
-            log_debug(f'Statement: {statement}')
+            logger.debug(f'Statement: {statement}')
             cursor.execute(statement)
             data = cursor.fetchall()
             data_columns = cursor.description
 
 
             #get table info from oracle db
-            log_info(f'Getting table info from oracle db for {self.table_name}')
+            logger.info(f'Getting table info from oracle db for {self.table_name}')
             statement = f"SELECT column_name,data_type, data_length, data_scale FROM all_tab_cols WHERE TABLE_NAME = '{self.table_name}' AND OWNER = 'DSPJTENERGY' AND HIDDEN_COLUMN = 'NO'"
-            log_debug(f'Statement: {statement}')
+            logger.debug(f'Statement: {statement}')
             cursor.execute(statement)
             table_info = cursor.fetchall()
             table_info_columns = cursor.description
@@ -134,7 +136,7 @@ class OraclePipeline:
             
             #save data to csv in raw folder
             
-            log_info(f'Saving data to csv in raw folder: {raw_path_file}')
+            logger.info(f'Saving data to csv in raw folder: {raw_path_file}')
             with open(raw_path_file, 'w+', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 #create array of header names
@@ -154,7 +156,7 @@ class OraclePipeline:
 
 
             #save table info to csv in raw folder
-            log_info(f'Saving table info to csv in table info folder: {table_info_file}')
+            logger.info(f'Saving table info to csv in table info folder: {table_info_file}')
             with open(table_info_file, 'w+', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 #create array of header names
@@ -170,30 +172,31 @@ class OraclePipeline:
 
             return raw_path_file
         except Exception as e:
-            log_error(f'Error extracting data from oracle database for table {self.table_name}: {e}')
+            logger.error(f'Error extracting data from oracle database for table {self.table_name}: {e}')
             raise e
 
     #function that transforms the data
     def transform(self, raw_path):
         try:
+            logger = logging.getLogger(__name__ + '.transform')
             #create transformed folder if it doesn't exist
             transformed_path = f'data/transformed/{self.table_name}'
             create_directory(transformed_path)
             transformed_file_path = f'{transformed_path}/{self.table_name}_{self.run_date}_transformed.csv'
-            #log_info(f'Transforming data from {raw_path} and saving it to {transformed_path_file}')
+            #logger.info(f'Transforming data from {raw_path} and saving it to {transformed_path_file}')
             #tmove data from raw folder to transformed folder
             shutil.move(raw_path, transformed_file_path)
             return transformed_file_path
         except Exception as e:
-            log_error(f'Error transforming data for table {self.table_name}: {e}')
+            logger.error(f'Error transforming data for table {self.table_name}: {e}')
             raise e
         
     #function that loads the data to mssql
     def load(self, transformed_file_path):
-        #create table in mssql if it doesn't exist
-        #loading data to mssql table, table name must be given, columns are variable depending on csv format
         try:
-            log_info('Loading data to MSSQL DB')
+            logger = logging.getLogger(__name__ + '.load')
+            logger.info('Loading data to MSSQL DB')
+            #create table in mssql if it doesn't exist
             #val not being used 0 options: 0 = table already exists, 1 = altered, 2 = created
             val = self.create_table()
             mssql_cursor = self.mssql_conn.cursor()
@@ -228,20 +231,20 @@ class OraclePipeline:
 
                 #check if row already exists in table, POSNR is primary Key
                 statement = f"SELECT * FROM {self.table_name} WHERE POSNR = '{row['POSNR']}'"
-                log_info(f'Checking if row with POSNR {row["POSNR"]} already exists..')
-                log_debug(f'Statement: {statement}')
+                logger.info(f'Checking if row with POSNR {row["POSNR"]} already exists..')
+                logger.debug(f'Statement: {statement}')
                 mssql_cursor.execute(statement)
 
                 if mssql_cursor.fetchone() is not None:
                     #if row exists
-                    log_warning(f'Row with POSNR {row["POSNR"]} already exists..')
+                    logger.warning(f'Row with POSNR {row["POSNR"]} already exists..')
                 else:
                     try:
 
                         #if row does not exist, insert row
-                        log_info(f'Row with POSNR {row["POSNR"]} does not exist, inserting..')
+                        logger.info(f'Row with POSNR {row["POSNR"]} does not exist, inserting..')
                         prepared_statement_final = f"{prepared_statement} VALUES ({string})"
-                        log_debug(f'Prepared statement: {prepared_statement_final}')
+                        logger.debug(f'Prepared statement: {prepared_statement_final}')
                         mssql_cursor.execute(prepared_statement_final)
                         #commit changes to mssql db
                         self.mssql_conn.commit()
@@ -253,7 +256,7 @@ class OraclePipeline:
 
 
                     except pyodbc.Error as e:
-                        log_error(f'Error loading row to MSSQL DB, inserting in failed csv: {e}')
+                        logger.error(f'Error loading row to MSSQL DB, inserting in failed csv: {e}')
                         #if insert fails, save row to csv in failed_inserts folder
                         #create failed_inserts folder in table_name_folder if it does not exist
                         failed_loaded_path = f'data/loaded/{self.table_name}/failed_inserts'
@@ -265,9 +268,9 @@ class OraclePipeline:
                             writer.writerow(row)
 
 
-            log_info('Data successfully loaded to MSSQL DB')
+            logger.info('Data successfully loaded to MSSQL DB')
         except Exception as e:
-            log_error(f'Error loading data to MSSQL DB: {e}')
+            logger.error(f'Error loading data to MSSQL DB: {e}')
             raise e
 
 
@@ -283,6 +286,7 @@ class OraclePipeline:
             return df
 
         try:
+            logger = logging.getLogger(__name__ + '.create_table')
             #preparing dataframe
             #get table info from csv in table info folder
             oracle_table_info_df = pd.read_csv(f'data/table_info/{self.table_name}/{self.table_name}_oracle_table_info.csv')
@@ -298,9 +302,9 @@ class OraclePipeline:
 
 
             #check if table already exists in mssql
-            log_info(f'Checking if table {self.table_name} exists in mssql')
+            logger.info(f'Checking if table {self.table_name} exists in mssql')
             statement = f"SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{self.table_name}'"
-            log_debug(f'Statement: {statement}')
+            logger.debug(f'Statement: {statement}')
             mssql_cursor = self.mssql_conn.cursor()
             mssql_cursor.execute(statement)
             table_exists = mssql_cursor.fetchone()
@@ -309,10 +313,10 @@ class OraclePipeline:
 
             #if table exists, check if table structure is the same
             if table_exists:
-                log_info(f'Table {self.table_name} already exists in mssql, checking if strcuture is the same')
+                logger.info(f'Table {self.table_name} already exists in mssql, checking if strcuture is the same')
                 statement = f"SELECT COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{self.table_name}'"
                 #get table info from mssql
-                log_debug(f'Statement: {statement}')
+                logger.debug(f'Statement: {statement}')
                 mssql_cursor.execute(statement)
                 mssql_table_info = mssql_cursor.fetchall()
                 #convert mssql_table_info to dataframe
@@ -323,10 +327,10 @@ class OraclePipeline:
                 mssql_table_info_df = create_data_type_length_scale_column(mssql_table_info_df)
                 #check if table info is the same
                 if oracle_table_info_df.equals(mssql_table_info_df):
-                    log_info(f'Table {self.table_name} structure is the same, no need to alter table')
+                    logger.info(f'Table {self.table_name} structure is the same, no need to alter table')
                     return 0 #return 0 if table structure is the same
                 else:
-                    log_info(f'Table {self.table_name} structure is different, altering table')
+                    logger.info(f'Table {self.table_name} structure is different, altering table')
                     #check which columns are different
                     #get columns that are in oracle but not in mssql
                     oracle_columns_not_in_mssql = oracle_table_info_df[~oracle_table_info_df['COLUMN_NAME'].isin(mssql_table_info_df['COLUMN_NAME'])]
@@ -337,7 +341,7 @@ class OraclePipeline:
                         alter_table_statement += f'ADD {row["COLUMN_NAME"]} {row["DATA_TYPE_LENGTH_SCALE"]},'
                     #remove last comma
                     alter_table_statement = alter_table_statement[:-1]
-                    log_debug(f'Alter table statement: {alter_table_statement}')
+                    logger.debug(f'Alter table statement: {alter_table_statement}')
                     #execute ALTER TABLE statement
                     mssql_cursor.execute(alter_table_statement)
                     self.mssql_conn.commit()
@@ -347,7 +351,7 @@ class OraclePipeline:
 
 
                 #create table in mssql if does not exist
-                log_info(f'Table does not exist creating table {self.table_name} in mssql')
+                logger.info(f'Table does not exist creating table {self.table_name} in mssql')
                 #create CREATE TABLE statement
                 create_table_statement = f'CREATE TABLE {self.table_name} ('
                 for index, row in oracle_table_info_df.iterrows():
@@ -367,15 +371,19 @@ class OraclePipeline:
                 return 2 #return 2 if table is created
 
         except Exception as e:
-            log_error(f'Error creating table {self.table_name}: {e}')
+            logger.error(f'Error creating table {self.table_name}: {e}')
             raise e
 
 
     #running entire pipeline
     def run_pipeline(self, table_name):
-        #setting table name
-        self.table_name = table_name
-        raw_path = self.extract()
-        transformed_path = self.transform(raw_path)
-        self.load(transformed_path)
-        self.set_last_update_date()
+        try:
+            #setting table name
+            self.table_name = table_name
+            raw_path = self.extract()
+            transformed_path = self.transform(raw_path)
+            self.load(transformed_path)
+            self.set_last_update_date()
+        except Exception as e:
+            logger.error(f'Error running pipeline for table {self.table_name}')
+            raise e
