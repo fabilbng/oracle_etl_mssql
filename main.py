@@ -54,6 +54,9 @@ def main():
             logger.info(f'Running pipeline for table {table}')
 
 
+            logger.info(f'Running pipeline for table {table}')
+
+
             exclude_columns = settings['tables'][tables.index(table)]['exclude_columns']
             pipeline.run_pipeline(table_name=table, exclude_columns=exclude_columns)
 
