@@ -51,9 +51,12 @@ def main():
     pipeline = OraclePipeline()
     for table in tables:
         try:
-            exclude_columns = settings['tables'][tables.index(table)]['exclude_columns']
             logger.info(f'Running pipeline for table {table}')
+
+
+            exclude_columns = settings['tables'][tables.index(table)]['exclude_columns']
             pipeline.run_pipeline(table_name=table, exclude_columns=exclude_columns)
+
         except Exception as e:
             logger.error(f'Error running pipeline for table {table}: {e}')
 

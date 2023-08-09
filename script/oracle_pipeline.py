@@ -29,7 +29,6 @@ class OraclePipeline:
         try:
             self.table_name = 'ARTLIF'
             self.exclude_columns = []
-
             logger = logging.getLogger(__name__ + '.__init__')
             logger.info(f'Initializing OraclePipeline')
             #timestamp of when the pipeline is run
@@ -109,13 +108,19 @@ class OraclePipeline:
             logger = logging.getLogger(__name__ + "." + self.table_name + '.extract')
             cursor = self.oracle_conn.cursor()
             entry_date = self.get_last_update_date()
-            #get data from oracle db where A_DATE >= entry_date
-            logger.info(f'Getting data from oracle db where A_DATE >= {entry_date}')
-            statement = f'SELECT * FROM DSPJTENERGY.{self.table_name} WHERE A_DATE >= TO_DATE(\'{entry_date}\', \'YYYY-MM-DD\')'
+
+
+
+            #get data from oracle db 
+            #if transaction data is true, get data from oracle db where A_DATE >= entry_date
+            
+            logger.info(f'Getting data from oracle db where U_DATE >= {entry_date}')
+            statement = f'SELECT * FROM DSPJTENERGY.{self.table_name} WHERE U_DATE >= TO_DATE(\'{entry_date}\', \'YYYY-MM-DD\')'
             logger.debug(f'Statement: {statement}')
             cursor.execute(statement)
             data = cursor.fetchall()
             data_columns = cursor.description
+
 
 
             #get table info from oracle db
@@ -232,26 +237,12 @@ class OraclePipeline:
             #create directory in loaded folder with table_name if it does not exist, 1 if created, 0 if already exists
             created = create_directory(loaded_path)
 
+
             #get headers from csv
             headers = list(data_df.columns.values)
-            #prepare headers for sql statement
-            headers_string = ''
-            for header in headers:
-                headers_string += f'{header}, '
-            headers_string = headers_string[:-2]
-            #prepare statement
-            prepared_statement = f"INSERT INTO {self.table_name} ({headers_string}) "
           
             #load data to mssql table
             for index, row in data_df.iterrows():
-                #get string of values from row, if value is nan, replace with None
-                string = ''
-                for value in row:
-                    if pd.isna(value):
-                        string += 'NULL, '
-                    else:
-                        string += f"'{value}', "
-                string = string[:-2]
 
                 #check if row already exists in table, POSNR is primary Key
                 statement = f"SELECT * FROM {self.table_name} WHERE POSNR = '{row['POSNR']}'"
@@ -259,17 +250,56 @@ class OraclePipeline:
                 logger.debug(f'Statement: {statement}')
                 mssql_cursor.execute(statement)
 
+                #if row exists, update row
                 if mssql_cursor.fetchone() is not None:
-                    #if row exists
-                    logger.warning(f'Row with POSNR {row["POSNR"]} already exists..')
+                   
+                    logger.info(f'Row with POSNR {row["POSNR"]} already exists, updating..')
+                    
+
+
+                    prepared_statement = f"UPDATE {self.table_name} SET "
+                    for header in headers:
+                        if pd.isna(row[header]):
+                            prepared_statement += f"{header} = NULL, "
+                        else:
+                            prepared_statement += f"{header} = '{row[header]}', "
+
+                    prepared_statement = prepared_statement[:-2]
+                    prepared_statement += f" WHERE POSNR = '{row['POSNR']}'"
+                    logger.debug(f'Prepared statement: {prepared_statement}')
+
+
+                    mssql_cursor.execute(prepared_statement)
+                    #commit changes to mssql db
+                    self.mssql_conn.commit()
+
+                #if row does not exist, insert row
                 else:
                     try:
+                        #prepare values_string of values from row, if value is nan, replace with None
+                        values_string = ''
+                        for value in row:
+                            if pd.isna(value):
+                                values_string += 'NULL, '
+                            else:
+                                values_string += f"'{value}', "
+                        values_string = values_string[:-2]
 
-                        #if row does not exist, insert row
+                        #prepare headers for sql statement
+                        headers_string = ''
+                        for header in headers:
+                            headers_string += f'{header}, '
+                        headers_string = headers_string[:-2]
+
+
+                        #prepare statement
+                        prepared_statement = f"INSERT INTO {self.table_name} ({headers_string}) VALUES ({values_string}) "
                         logger.info(f'Row with POSNR {row["POSNR"]} does not exist, inserting..')
-                        prepared_statement_final = f"{prepared_statement} VALUES ({string})"
-                        logger.debug(f'Prepared statement: {prepared_statement_final}')
-                        mssql_cursor.execute(prepared_statement_final)
+                        logger.debug(f'Prepared statement: {prepared_statement}')
+
+
+
+                        mssql_cursor.execute(prepared_statement)
                         #commit changes to mssql db
                         self.mssql_conn.commit()
 
@@ -296,7 +326,6 @@ class OraclePipeline:
         except Exception as e:
             logger.error(f'Error loading data to MSSQL DB: {e}')
             raise e
-
 
 
 
@@ -402,7 +431,7 @@ class OraclePipeline:
 
 
     #running entire pipeline
-    def run_pipeline(self, table_name, exclude_columns = [] ):
+    def run_pipeline(self, table_name, exclude_columns = []):
         try:
             #setting table name
             self.table_name = table_name
