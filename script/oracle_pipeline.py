@@ -280,27 +280,12 @@ class OraclePipeline:
                     #commit changes to mssql db
                     self.mssql_conn.commit()
 
-                #if row does not exist, insert row
-                   
-                    logger.info(f'Row with POSNR {row["POSNR"]} already exists, updating..')
-                    
+                    #save row to csv in loaded folder, csv name with timestamp
+                    with open(loaded_file_path, 'a+', newline='', encoding='utf-8') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(row)
 
 
-                    prepared_statement = f"UPDATE {self.table_name} SET "
-                    for header in headers:
-                        if pd.isna(row[header]):
-                            prepared_statement += f"{header} = NULL, "
-                        else:
-                            prepared_statement += f"{header} = '{row[header]}', "
-
-                    prepared_statement = prepared_statement[:-2]
-                    prepared_statement += f" WHERE POSNR = '{row['POSNR']}'"
-                    logger.debug(f'Prepared statement: {prepared_statement}')
-
-
-                    mssql_cursor.execute(prepared_statement)
-                    #commit changes to mssql db
-                    self.mssql_conn.commit()
 
                 #if row does not exist, insert row
                 else:
@@ -338,16 +323,8 @@ class OraclePipeline:
 
                         #prepare statement
                         prepared_statement = f"INSERT INTO {self.table_name} ({headers_string}) VALUES ({values_string}) "
-                        #prepare statement
-                        prepared_statement = f"INSERT INTO {self.table_name} ({headers_string}) VALUES ({values_string}) "
                         logger.info(f'Row with POSNR {row["POSNR"]} does not exist, inserting..')
                         logger.debug(f'Prepared statement: {prepared_statement}')
-
-
-
-                        mssql_cursor.execute(prepared_statement)
-                        logger.debug(f'Prepared statement: {prepared_statement}')
-
 
 
                         mssql_cursor.execute(prepared_statement)
