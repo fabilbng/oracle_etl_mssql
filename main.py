@@ -85,12 +85,16 @@ def run_pipelines():
         except Exception as e:
             logger.error(f'Error running pipeline for table {table}: {e}')
 
-            
+
+def temp_load():
+    pipeline = OraclePipeline()
+    pipeline.run_load_again('ABWDAT', 'data/transformed/ABWDAT/ABWDAT_20231408_093552_transformed.csv', 'data/loaded/ABWDAT/ABWDAT_20231408_093552_loaded.csv' )     
 
 
 if __name__ == '__main__':
     setup_logging()
-    run_pipelines()
+    #run_pipelines()
+    temp_load()
     storage_cleanup()
 
 
