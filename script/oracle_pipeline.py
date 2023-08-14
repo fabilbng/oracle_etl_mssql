@@ -237,14 +237,15 @@ class OraclePipeline:
 
             #read csv to pandas dataframe
             data_df = pd.read_csv(transformed_file_path, sep=',', encoding='utf-8', engine='python')
-            return data_df
+            #load data to mssql table
+            self.single_load(data_df)
         except Exception as e:
             logger.error(f'Error setting up load: {e}')
             raise e
 
 
-    #bulk load function to use BULK INSERT in mssql
-    def bulk_load(self, transformed_file_path):
+    #bulk load function to use BULK INSERT in mssql WORK IN PROGRESS
+    def bulk_load(self, data_df):
         try:
             logger = logging.getLogger(__name__ + "." + self.table_name + '.bulk_load')
             logger.info('Loading data to MSSQL DB')
