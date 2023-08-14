@@ -85,9 +85,12 @@ def run_pipelines():
         except Exception as e:
             logger.error(f'Error running pipeline for table {table}: {e}')
 
+            
 
 
 if __name__ == '__main__':
     setup_logging()
     run_pipelines()
     storage_cleanup()
+
+

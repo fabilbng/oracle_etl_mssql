@@ -222,7 +222,6 @@ class OraclePipeline:
 
 
 
-
     #function that loads the data to mssql
     def load(self, transformed_file_path):
         try:
@@ -238,6 +237,8 @@ class OraclePipeline:
             #read csv to pandas dataframe
             loaded_path = f'data/loaded/{self.table_name}'
             loaded_file_path = f'{loaded_path}/{self.table_name}_{self.run_date}_loaded.csv'
+
+
             data_df = pd.read_csv(transformed_file_path, sep=',', encoding='utf-8', engine='python')
             #create directory in loaded folder with table_name if it does not exist, 1 if created, 0 if already exists
             created = create_directory(loaded_path)
@@ -377,7 +378,7 @@ class OraclePipeline:
         except Exception as e:
             logger.error(f'Error loading data to MSSQL DB: {e}')
             raise e
-
+    
 
 
     #function that creates a table in mssql based on the table info from oracle, if the table does not already exist, if it exists, it alters it if the structure changed
@@ -480,7 +481,7 @@ class OraclePipeline:
 
 
 
-
+    
     #running entire pipeline
     def run_pipeline(self, table_name, exclude_columns = []):
         try:
@@ -494,4 +495,20 @@ class OraclePipeline:
             self.set_last_update_date()
         except Exception as e:
             logger.error(f'Error running pipeline for table {self.table_name}')
+            raise e
+
+
+
+    def run_load_again(self, table_name, transformed_file_path):
+        try:
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.run_load_again')
+            logger.info(f'Running load again for table {self.table_name}')
+
+
+            #setting table name
+            self.table_name = table_name
+            self.load(transformed_file_path)
+            self.set_last_update_date()
+        except Exception as e:
+            logger.error(f'Error run load again for table {self.table_name}')
             raise e
