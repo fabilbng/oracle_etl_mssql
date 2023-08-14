@@ -27,15 +27,17 @@ logger = logging.getLogger(__name__)
 class OraclePipeline:
     def __init__(self, table_name = 'ARTLIF', exclude_columns = [], loaded_path = ''):
         try:
+            logger = logging.getLogger(__name__ + '.__init__')
+            logger.info(f'Initializing OraclePipeline')
+
+
             self.table_name = table_name
             #for since splitting load function
             self.loaded_path = loaded_path
-            self.exclude_columns = exclude_columns
-            
-            logger = logging.getLogger(__name__ + '.__init__')
-            logger.info(f'Initializing OraclePipeline')
-            #timestamp of when the pipeline is run
-            self.run_date = datetime.datetime.now().strftime('%Y%d%m_%H%M%S')
+            self.exclude_columns = exclude_columns 
+            self.run_date = ''
+
+
             logger.info('Connecting to oracle database')
             self.oracle_conn = oracledb.connect(user=oracle_un, password=oracle_pw, dsn=oracle_db)
 
@@ -237,6 +239,7 @@ class OraclePipeline:
 
             #read csv to pandas dataframe
             data_df = pd.read_csv(transformed_file_path, sep=',', encoding='utf-8', engine='python')
+
             #load data to mssql table
             self.single_load(data_df)
         except Exception as e:
@@ -272,7 +275,12 @@ class OraclePipeline:
             mssql_cursor = self.mssql_conn.cursor()
             #get headers from csv
             headers = list(data_df.columns.values)
-          
+
+            #write headers to csv in loaded folder, csv name with timestamp
+            with open(loaded_file_path, 'w+', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+            
             #load data to mssql table
             for index, row in data_df.iterrows():
 
@@ -490,6 +498,7 @@ class OraclePipeline:
             #setting table name
             self.table_name = table_name
             self.exclude_columns = exclude_columns
+            self.run_date = datetime.datetime.now().strftime('%Y%d%m_%H%M%S')
 
             self.loaded_path = f'data/loaded/{self.table_name}'
             #run pipeline
@@ -503,15 +512,52 @@ class OraclePipeline:
 
 
 
-    def run_load_again(self, table_name, transformed_file_path):
+    def run_load_again(self, table_name, old_transformed_file_path, old_loaded_file_path):
         try:
+            self.table_name = table_name
             logger = logging.getLogger(__name__ + "." + self.table_name + '.run_load_again')
             logger.info(f'Running load again for table {self.table_name}')
 
+           
 
-            #setting table name
-            self.table_name = table_name
-            self.load(transformed_file_path)
+            
+            new_transformed_file_path = f'data/transformed/{self.table_name}_{self.run_date}_transformed_rerun.csv'
+            #open old loaded file if exists
+            if os.path.exists(old_loaded_file_path):
+
+
+                #open old transformed file
+                old_transformed_df = pd.read_csv(old_transformed_file_path, sep=',', encoding='utf-8', engine='python')
+                #get POSNRs from old transformed file
+                old_transformed_POSNRs = old_transformed_df['POSNR'].tolist()
+                del old_transformed_df
+
+                #open old loaded file
+                old_loaded_df = pd.read_csv(old_loaded_file_path, sep=',', encoding='utf-8', engine='python')
+                #get POSNRs from old loaded file
+                old_loaded_POSNRs = old_loaded_df['POSNR'].tolist()
+                del old_loaded_df
+                
+
+
+                #get POSNRs that are in old transformed file but not in old loaded file
+                POSNRs_to_load = [posnr for posnr in old_transformed_POSNRs if posnr not in old_loaded_POSNRs]
+                
+                
+                
+                #get rows from old transformed file that have POSNRs that are not in old loaded file
+                rows_to_load = old_transformed_df[old_transformed_df['POSNR'].isin(POSNRs_to_load)]
+
+                logger.info(f'Saving leftover rows to csv in transformed folder: {new_transformed_file_path}')
+                #save rows to csv in transformed_file, csv name with timestamp + transformed + rerun
+                rows_to_load.to_csv(new_transformed_file_path, index=False, encoding='utf-8')
+            else:
+                logger.info(f'Old loaded file does not exist, copying old transformed file to new transformed file')
+                #if old loaded file does not exist, just copy old transformed file to new transformed file
+                shutil.copy(old_transformed_file_path, new_transformed_file_path)
+
+
+            self.load(new_transformed_file_path)
             self.set_last_update_date()
         except Exception as e:
             logger.error(f'Error run load again for table {self.table_name}')
