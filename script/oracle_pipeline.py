@@ -25,10 +25,13 @@ logger = logging.getLogger(__name__)
 
 
 class OraclePipeline:
-    def __init__(self):
+    def __init__(self, table_name = 'ARTLIF', exclude_columns = [], loaded_path = ''):
         try:
-            self.table_name = 'ARTLIF'
-            self.exclude_columns = []
+            self.table_name = table_name
+            #for since splitting load function
+            self.loaded_path = loaded_path
+            self.exclude_columns = exclude_columns
+            
             logger = logging.getLogger(__name__ + '.__init__')
             logger.info(f'Initializing OraclePipeline')
             #timestamp of when the pipeline is run
@@ -218,32 +221,54 @@ class OraclePipeline:
         except Exception as e:
             logger.error(f'Error transforming data for table {self.table_name}: {e}')
             raise e
-
-
-
-
-
-    #function that loads the data to mssql
+    
+    #creates directories and reads csv to pandas dataframe
     def load(self, transformed_file_path):
         try:
-            logger = logging.getLogger(__name__ + "." + self.table_name + '.load')
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.setup_load')
             logger.info('Loading data to MSSQL DB')
+            #create directory in loaded folder with table_name if it does not exist, 1 if created, 0 if already exists
+            created = create_directory(self.loaded_path)
 
 
             #create table in mssql if it doesn't exist
             #val not being used 0 options: 0 = table already exists, 1 = altered, 2 = created
             val = self.create_table()
-            mssql_cursor = self.mssql_conn.cursor()
 
             #read csv to pandas dataframe
-            loaded_path = f'data/loaded/{self.table_name}'
-            loaded_file_path = f'{loaded_path}/{self.table_name}_{self.run_date}_loaded.csv'
             data_df = pd.read_csv(transformed_file_path, sep=',', encoding='utf-8', engine='python')
-            #create directory in loaded folder with table_name if it does not exist, 1 if created, 0 if already exists
-            created = create_directory(loaded_path)
+            return data_df
+        except Exception as e:
+            logger.error(f'Error setting up load: {e}')
+            raise e
+
+
+    #bulk load function to use BULK INSERT in mssql
+    def bulk_load(self, transformed_file_path):
+        try:
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.bulk_load')
+            logger.info('Loading data to MSSQL DB')
+
+            loaded_file_path = f'{self.loaded_path}/{self.table_name}_{self.run_date}_loaded.csv'
+            mssql_cursor = self.mssql_conn.cursor()
+
+            #get headers from csv
+            headers = list(data_df.columns.values)
+
+        except Exception as e:
+            logger.error(f'Error loading data to MSSQL DB: {e}')
+            raise e
 
 
 
+    #function that loads the data to mssql
+    def single_load(self, data_df):
+        try:
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.single_load')
+            logger.info('Loading data to MSSQL DB')
+            
+            loaded_file_path = f'{self.loaded_path}/{self.table_name}_{self.run_date}_loaded.csv'
+            mssql_cursor = self.mssql_conn.cursor()
             #get headers from csv
             headers = list(data_df.columns.values)
           
@@ -465,6 +490,8 @@ class OraclePipeline:
             self.table_name = table_name
             self.exclude_columns = exclude_columns
 
+            self.loaded_path = f'data/loaded/{self.table_name}'
+            #run pipeline
             raw_path = self.extract()
             transformed_path = self.transform(raw_path)
             self.load(transformed_path)
