@@ -199,24 +199,27 @@ class OraclePipeline:
     def transform(self, raw_path):
         try:
             logger = logging.getLogger(__name__ + "." + self.table_name + '.transform')
+            logger.info('Transforming data')
             #if excluded columns is empty, run this code block
             transformed_path = f'data/transformed/{self.table_name}'
             create_directory(transformed_path)
             transformed_file_path = f'{transformed_path}/{self.table_name}_{self.run_date}_transformed.csv'
             if not self.exclude_columns: 
-                #just move the raw to trasnformed folder to save space
+                #move raw file to transformed folder
+                logger.debug(f'Moving raw file to transformed folder: {transformed_file_path}')
                 shutil.move(raw_path, transformed_file_path)
+
                 return transformed_file_path
             else:
                 #exclude columns from raw data
-                logger.info(f'Excluding columns {self.exclude_columns} from raw data')
+                logger.debug(f'Excluding columns {self.exclude_columns} from raw data')
                 #read csv to pandas dataframe
                 df = pd.read_csv(raw_path, sep=',', encoding='utf-8')
                 #drop excluded columns
                 df.drop(self.exclude_columns, axis=1, inplace=True)
                 #save to csv in transformed folder
-                logger.info(f'Saving transformed data to csv in transformed folder: {transformed_file_path}')
-                df.to_csv(transformed_file_path, index=False, encoding='utf-8')
+                logger.debug(f'Saving transformed data to csv in transformed folder: {transformed_file_path}')
+                df.to_csv(transformed_file_path, index=False)
                 return transformed_file_path
 
 
@@ -286,7 +289,7 @@ class OraclePipeline:
 
                 #check if row already exists in table, POSNR is primary Key
                 statement = f"SELECT * FROM {self.table_name} WHERE POSNR = '{row['POSNR']}'"
-                logger.info(f'Checking if row with POSNR {row["POSNR"]} already exists..')
+                logger.debug(f'Checking if row with POSNR {row["POSNR"]} already exists..')
                 logger.debug(f'Statement: {statement}')
                 mssql_cursor.execute(statement)
 
@@ -508,57 +511,4 @@ class OraclePipeline:
             self.set_last_update_date()
         except Exception as e:
             logger.error(f'Error running pipeline for table {self.table_name}')
-            raise e
-
-
-
-    def run_load_again(self, table_name, old_transformed_file_path, old_loaded_file_path):
-        try:
-            self.table_name = table_name
-            logger = logging.getLogger(__name__ + "." + self.table_name + '.run_load_again')
-            logger.info(f'Running load again for table {self.table_name}')
-
-           
-
-            
-            new_transformed_file_path = f'data/transformed/{self.table_name}_{self.run_date}_transformed_rerun.csv'
-            #open old loaded file if exists
-            if os.path.exists(old_loaded_file_path):
-
-
-                #open old transformed file
-                old_transformed_df = pd.read_csv(old_transformed_file_path, sep=',', encoding='utf-8', engine='python')
-                #get POSNRs from old transformed file
-                old_transformed_POSNRs = old_transformed_df['POSNR'].tolist()
-                del old_transformed_df
-
-                #open old loaded file
-                old_loaded_df = pd.read_csv(old_loaded_file_path, sep=',', encoding='utf-8', engine='python')
-                #get POSNRs from old loaded file
-                old_loaded_POSNRs = old_loaded_df['POSNR'].tolist()
-                del old_loaded_df
-                
-
-
-                #get POSNRs that are in old transformed file but not in old loaded file
-                POSNRs_to_load = [posnr for posnr in old_transformed_POSNRs if posnr not in old_loaded_POSNRs]
-                
-                
-                
-                #get rows from old transformed file that have POSNRs that are not in old loaded file
-                rows_to_load = old_transformed_df[old_transformed_df['POSNR'].isin(POSNRs_to_load)]
-
-                logger.info(f'Saving leftover rows to csv in transformed folder: {new_transformed_file_path}')
-                #save rows to csv in transformed_file, csv name with timestamp + transformed + rerun
-                rows_to_load.to_csv(new_transformed_file_path, index=False, encoding='utf-8')
-            else:
-                logger.info(f'Old loaded file does not exist, copying old transformed file to new transformed file')
-                #if old loaded file does not exist, just copy old transformed file to new transformed file
-                shutil.copy(old_transformed_file_path, new_transformed_file_path)
-
-
-            self.load(new_transformed_file_path)
-            self.set_last_update_date()
-        except Exception as e:
-            logger.error(f'Error run load again for table {self.table_name}')
             raise e
