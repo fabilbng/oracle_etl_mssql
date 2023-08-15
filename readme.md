@@ -49,6 +49,8 @@ The columns will still be there on the mssql table as the table synchronisation 
 
 ## TODOS
 - restructure logging system using python documentation (rn pretty quick n' not how it's supposed to be used) **DONE**
+- sys args for to run specific steps
+- load function to load multiple rows at once (batch insert) 
 - try using pandas to_sql function to load data, rn not working due to   precision error would need to use sqalchemy (large restructuring of code) 
 - better file_name mapping/naming convention 
     - some file paths are duplicate/not saved in variables causing troubles when editing the code
