@@ -25,19 +25,29 @@ logger = logging.getLogger(__name__)
 
 
 class OraclePipeline:
-    def __init__(self, table_name = 'ARTLIF', exclude_columns = [], loaded_path = ''):
+    def __init__(self, table_name = '', exclude_columns = []):
         try:
+
+            
+            if table_name == '':
+                self.table_name = ''
+                self.raw_path = 'data/raw'
+                self.transformed_path = 'data/transformed'
+                self.loaded_path = 'data/loaded'
+                self.table_info_path = 'data/table_info'
+            elif table_name != '':
+                self.table_name = table_name
+                self.raw_path = f'data/raw/{self.table_name}'
+                self.transformed_path = f'data/transformed/{self.table_name}'
+                self.loaded_path = f'data/loaded/{self.table_name}'
+                self.table_info_path = f'data/table_info/{self.table_name}'
+            self.exclude_columns = exclude_columns
+            
+            
             logger = logging.getLogger(__name__ + '.__init__')
             logger.info(f'Initializing OraclePipeline')
-
-
-            self.table_name = table_name
-            #for since splitting load function
-            self.loaded_path = loaded_path
-            self.exclude_columns = exclude_columns 
-            self.run_date = ''
-
-
+            #timestamp of when the pipeline is run
+            self.run_date = datetime.datetime.now().strftime('%Y%d%m_%H%M%S')
             logger.info('Connecting to oracle database')
             self.oracle_conn = oracledb.connect(user=oracle_un, password=oracle_pw, dsn=oracle_db)
 
@@ -123,10 +133,9 @@ class OraclePipeline:
 
 
 
-            #get data from oracle db 
-            
-            logger.info(f'Getting data from oracle db where U_DATE >= {entry_date}')
+            #get data from oracle db     
             statement = f'SELECT * FROM DSPJTENERGY.{self.table_name} WHERE U_DATE >= TO_DATE(\'{entry_date}\', \'YYYY-MM-DD\')'
+            logger.debug(f'Getting data from oracle db where U_DATE >= {entry_date}')
             logger.debug(f'Statement: {statement}')
             cursor.execute(statement)
             data = cursor.fetchall()
@@ -144,16 +153,15 @@ class OraclePipeline:
 
 
             
-            #create raw folder if it doesn't exist
-            raw_path = f'data/raw/{self.table_name}'
-            created = create_directory(raw_path)
+            
+            
             #raw path file: table name + timestamp + .csv
-            raw_path_file = f'{raw_path}/{self.table_name}_{self.run_date}.csv'
+            raw_file_path = f'{self.raw_path}/{self.table_name}_{self.run_date}.csv'
 
             
             #save data to csv in raw folder
-            logger.info(f'Saving data to csv in raw folder: {raw_path_file}')
-            with open(raw_path_file, 'w+', newline='', encoding='utf-8') as f:
+            logger.debug(f'Saving data to csv in raw folder: {raw_file_path}')
+            with open(raw_file_path, 'w+', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 #create array of header names
                 headers = []
@@ -165,15 +173,13 @@ class OraclePipeline:
                 writer.writerows(data)
 
 
-            #create table info folder if it doesn't exist
-            table_info_path = f'data/table_info/{self.table_name}'
-            create_directory(table_info_path)
-            table_info_file = f'{table_info_path}/{self.table_name}_oracle_table_info.csv'
+           
+            table_info_file_path = f'{self.table_info_path}/{self.table_name}_oracle_table_info.csv'
 
 
             #save table info to csv in raw folder
-            logger.info(f'Saving table info to csv in table info folder: {table_info_file}')
-            with open(table_info_file, 'w+', newline='', encoding='utf-8') as f:
+            logger.info(f'Saving table info to csv in table info folder: {table_info_file_path}')
+            with open(table_info_file_path, 'w+', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 #create array of header names
 
@@ -186,7 +192,8 @@ class OraclePipeline:
                 # Write the rows
                 writer.writerows(table_info)
 
-            return raw_path_file
+
+            return raw_file_path
         except Exception as e:
             logger.error(f'Error extracting from oracle db for table {self.table_name}: {e}')
             raise e
@@ -201,9 +208,7 @@ class OraclePipeline:
             logger = logging.getLogger(__name__ + "." + self.table_name + '.transform')
             logger.info('Transforming data')
             #if excluded columns is empty, run this code block
-            transformed_path = f'data/transformed/{self.table_name}'
-            create_directory(transformed_path)
-            transformed_file_path = f'{transformed_path}/{self.table_name}_{self.run_date}_transformed.csv'
+            transformed_file_path = f'{self.transformed_path}/{self.table_name}_{self.run_date}_transformed.csv'
             if not self.exclude_columns: 
                 #move raw file to transformed folder
                 logger.debug(f'Moving raw file to transformed folder: {transformed_file_path}')
@@ -232,39 +237,158 @@ class OraclePipeline:
         try:
             logger = logging.getLogger(__name__ + "." + self.table_name + '.setup_load')
             logger.info('Loading data to MSSQL DB')
-            #create directory in loaded folder with table_name if it does not exist, 1 if created, 0 if already exists
-            created = create_directory(self.loaded_path)
+            
 
 
             #create table in mssql if it doesn't exist
             #val not being used 0 options: 0 = table already exists, 1 = altered, 2 = created
             val = self.create_table()
 
+
             #read csv to pandas dataframe
             data_df = pd.read_csv(transformed_file_path, sep=',', encoding='utf-8', engine='python')
 
-            #load data to mssql table
-            self.single_load(data_df)
+
+            #open loaded file path and updated file path and insert header
+            logger.debug("Creating loaded and updated csv files with headers")
+            loaded_file_path = f'{self.loaded_path}/{self.table_name}_{self.run_date}_loaded.csv'
+            updated_file_path = f'{self.loaded_path}/{self.table_name}_{self.run_date}_updated.csv'
+            with open(loaded_file_path, 'w+', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(data_df.columns.values)
+            with open(updated_file_path, 'w+', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(data_df.columns.values)
+
+
+            #TESTING BULK LOAD
+            self.bulk_load(data_df)
+
         except Exception as e:
             logger.error(f'Error setting up load: {e}')
             raise e
+
+
 
 
     #bulk load function to use BULK INSERT in mssql WORK IN PROGRESS
     def bulk_load(self, data_df):
         try:
             logger = logging.getLogger(__name__ + "." + self.table_name + '.bulk_load')
+
+            if data_df.empty:
+                logger.info('No new data since last run...')
+                return
+            
             logger.info('Loading data to MSSQL DB')
+            
 
             loaded_file_path = f'{self.loaded_path}/{self.table_name}_{self.run_date}_loaded.csv'
             mssql_cursor = self.mssql_conn.cursor()
 
             #get headers from csv
             headers = list(data_df.columns.values)
+            
+            #rowcount dataframe
+            rowcount = data_df.shape[0]
+            rows_per_chunk = 100
 
+            #divide dataframe into 20 row chunks
+            #get number of chunks
+            chunks = rowcount // rows_per_chunk
+
+            #get remainder
+            remainder = rowcount % rows_per_chunk
+
+            #if remainder is not 0, add 1 to chunks
+            if remainder != 0:
+                chunks += 1
+            
+            #get chunks of dataframe
+            data_df_chunks = np.array_split(data_df, chunks)
+
+            #load data to mssql table
+            for data_df_chunk in data_df_chunks:
+                try:
+                    #get POSNR from dataframe
+                    POSNR = data_df_chunk['POSNR']
+
+                    #check database for POSNRs
+                    statement = f"SELECT POSNR FROM {self.table_name} WHERE POSNR IN ({','.join(POSNR.astype(str))})"
+                    logger.debug(f'Checking if rows with POSNRs already exists..')
+                    logger.debug(f'Statement: {statement}')
+                    mssql_cursor.execute(statement)
+                    #get POSNRs that already exist in database
+                    POSNRs_in_db = mssql_cursor.fetchall()
+                    #turn into int list
+                    POSNRs_in_db = [int(i[0]) for i in POSNRs_in_db]
+                    
+                   
+                    
+                    data_df_in_db = data_df_chunk[data_df_chunk['POSNR'].isin(POSNRs_in_db)]
+                    data_df_not_in_db = data_df_chunk[~data_df_chunk['POSNR'].isin(POSNRs_in_db)]
+                   
+                    
+                    #Prepare Sql
+                    #prepare headers for sql statement
+                    headers_string = ''
+                    for header in headers:
+                        headers_string += f'{header}, '
+                    headers_string = headers_string[:-2]
+
+
+                    #HANDLING ROWS THAT DONT EXIST IN DB
+                    #check if data_df_not_in_db is defined
+                    if data_df_not_in_db.empty:
+                        logger.debug(f'All rows with POSNRs {POSNRs_in_db} already exist..')
+
+                    elif data_df_not_in_db.shape[0] >= 1:
+                        #prepare values_string of values from row, if value is nan, replace with NULL
+                        values_string = ''
+                        for index, row in data_df_not_in_db.iterrows():
+                            for value in row:
+                                if pd.isna(value):
+                                    values_string += 'NULL, '
+                                else:
+                                    values_string += f"'{value}', "
+                            values_string = values_string[:-2]
+                            values_string += '), ('
+                        values_string = values_string[:-4]
+
+                        #prepare statement
+                        rowcount = rowcount - data_df_not_in_db.shape[0]
+                        logger.info(f'Inserting {data_df_not_in_db.shape[0]} rows that do not exist in DB: {rowcount} rows left')
+                        prepared_statement = f"INSERT INTO {self.table_name} ({headers_string}) VALUES ({values_string}) "
+                        logger.debug(f'Prepared statement: {prepared_statement}')
+                        #execute prepared statement
+                        mssql_cursor.execute(prepared_statement)
+                        self.mssql_conn.commit()
+                        #save data_df_not_in_db to csv in loaded folder without header, csv name with timestamp
+                        with open(loaded_file_path, 'a+', newline='', encoding='utf-8') as f:
+                            writer = csv.writer(f)
+                            writer.writerows(data_df_not_in_db.values)
+
+
+
+                    #HANDLING ROWS THAT EXIST IN DB
+                    #check if data_df_in_db is not empty
+                    if data_df_in_db.empty:
+                        logger.debug(f'No rows with POSNRs {POSNRs_in_db} already exist..')
+
+                    elif data_df_in_db.shape[0] >= 1:
+                        #update rows
+                        for index, row in data_df_in_db.iterrows():
+                            self.update_row(row, headers)
+            
+                except Exception as e:
+                    logger.error(f'Error loading chunk to MSSQL DB, single loading...')
+                    self.single_load(data_df_chunk)
+
+    
         except Exception as e:
             logger.error(f'Error loading data to MSSQL DB: {e}')
             raise e
+
 
 
 
@@ -296,32 +420,8 @@ class OraclePipeline:
                 #if row exists, update row
                 #if row exists, update row
                 if mssql_cursor.fetchone() is not None:
-                   
                     logger.info(f'Row with POSNR {row["POSNR"]} already exists, updating..')
-                    
-
-
-                    prepared_statement = f"UPDATE {self.table_name} SET "
-                    for header in headers:
-                        if pd.isna(row[header]):
-                            prepared_statement += f"{header} = NULL, "
-                        else:
-                            prepared_statement += f"{header} = '{row[header]}', "
-
-                    prepared_statement = prepared_statement[:-2]
-                    prepared_statement += f" WHERE POSNR = '{row['POSNR']}'"
-                    logger.debug(f'Prepared statement: {prepared_statement}')
-
-
-                    mssql_cursor.execute(prepared_statement)
-                    #commit changes to mssql db
-                    self.mssql_conn.commit()
-
-                    #save row to csv in loaded folder, csv name with timestamp
-                    with open(loaded_file_path, 'a+', newline='', encoding='utf-8') as f:
-                        writer = csv.writer(f)
-                        writer.writerow(row)
-
+                    self.update_row(row, headers)
 
 
                 #if row does not exist, insert row
@@ -351,12 +451,6 @@ class OraclePipeline:
                                 values_string += f"'{value}', "
                         values_string = values_string[:-2]
 
-                        #prepare headers for sql statement
-                        headers_string = ''
-                        for header in headers:
-                            headers_string += f'{header}, '
-                        headers_string = headers_string[:-2]
-
 
                         #prepare statement
                         prepared_statement = f"INSERT INTO {self.table_name} ({headers_string}) VALUES ({values_string}) "
@@ -377,10 +471,10 @@ class OraclePipeline:
                     except pyodbc.Error as e:
                         logger.error(f'Error loading row to MSSQL DB, inserting in failed csv: {e}')
                         #if insert fails, save row to csv in failed_inserts folder
-                        #create failed_inserts folder in table_name_folder if it does not exist
-                        failed_loaded_path = f'data/loaded/{self.table_name}/failed_inserts'
-                        failed_loaded_file_path = f'{failed_loaded_path}/{self.table_name}_{self.run_date}_failed_inserts.csv'
-                        created = create_directory(failed_loaded_path)
+                        
+                        failed_loaded_file_path = f'{self.failed_loaded_path}/{self.table_name}_{self.run_date}_failed_inserts.csv'
+
+                        
                         #save failed row to csv in failed_inserts folder
                         with open(failed_loaded_file_path, 'a+', newline='', encoding='utf-8') as f:
                             writer = csv.writer(f)
@@ -392,6 +486,48 @@ class OraclePipeline:
             logger.error(f'Error loading data to MSSQL DB: {e}')
             raise e
     
+
+    #function that takes a single  dataframe row and updates it in mssql
+    def update_row(self, row, headers):
+        try:
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.update_row')
+            mssql_cursor = self.mssql_conn.cursor()
+            prepared_statement = f"UPDATE {self.table_name} SET "
+            for header in headers:
+                if pd.isna(row[header]):
+                    prepared_statement += f"{header} = NULL, "
+                else:
+                    prepared_statement += f"{header} = '{row[header]}', "
+
+            prepared_statement = prepared_statement[:-2]
+            prepared_statement += f" WHERE POSNR = '{row['POSNR']}'"
+            logger.info(f'Row with POSNR {row["POSNR"]} already exists, updating..')
+            logger.debug(f'Prepared statement: {prepared_statement}')
+            mssql_cursor.execute(prepared_statement)
+            self.mssql_conn.commit()
+
+            #save row to csv in updated folder, csv name with timestamp
+            updated_path = f'data/loaded/{self.table_name}'
+            updated_file_path = f'{updated_path}/{self.table_name}_{self.run_date}_updated.csv'
+            created = create_directory(updated_path)
+            #save failed row to csv in failed_inserts folder
+            with open(updated_file_path, 'a+', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(row)
+        
+        except Exception as e:
+            logger.error(f'Error updating data to MSSQL DB: {e}')
+            failed_update_path = f'data/loaded/{self.table_name}/failed_inserts'
+            failed_update_file_path = f'{failed_update_path}/{self.table_name}_{self.run_date}_failed_update.csv'
+            created = create_directory(failed_update_path)
+            #save failed row to csv in failed_inserts folder
+            with open(failed_update_file_path, 'a+', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(row)
+            raise e
+
+
+
 
 
     #function that creates a table in mssql based on the table info from oracle, if the table does not already exist, if it exists, it alters it if the structure changed
@@ -498,17 +634,26 @@ class OraclePipeline:
     #running entire pipeline
     def run_pipeline(self, table_name, exclude_columns = []):
         try:
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.run_pipeline')
+            logger.debug(f'Running pipeline for table {table_name}')
             #setting table name
             self.table_name = table_name
             self.exclude_columns = exclude_columns
-            self.run_date = datetime.datetime.now().strftime('%Y%d%m_%H%M%S')
 
-            self.loaded_path = f'data/loaded/{self.table_name}'
+            #creating neccessary folders
+            self.raw_path = create_directory(f'data/raw/{self.table_name}')
+            self.transformed_path = create_directory(f'data/transformed/{self.table_name}')
+            self.loaded_path =  create_directory(f'data/loaded/{self.table_name}')
+            self.table_info_path = create_directory(f'data/table_info/{self.table_name}')
+            self.failed_loaded_path = create_directory(f'data/loaded/{self.table_name}/failed_inserts')
+
             #run pipeline
-            raw_path = self.extract()
-            transformed_path = self.transform(raw_path)
-            self.load(transformed_path)
+            self.run_date = datetime.datetime.now().strftime('%Y%d%m_%H%M%S')
+            raw_file_path = self.extract()
+            transformed_file_path = self.transform(raw_file_path)
+            self.load(transformed_file_path)
             self.set_last_update_date()
+            logger.debug(f'Pipeline for table {self.table_name} successfully ran')
         except Exception as e:
             logger.error(f'Error running pipeline for table {self.table_name}')
             raise e
