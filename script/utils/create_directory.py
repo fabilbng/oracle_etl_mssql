@@ -9,8 +9,9 @@ def create_directory(directory):
         #checking if directory with table_name exists
         if not os.path.exists(directory):
             os.makedirs(directory)
-            return 1 
-        return 0
+            return directory
+        return directory
     except Exception as e:
         logger.error(f'Error checking for directory: {e}')
         raise e
+
