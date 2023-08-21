@@ -262,6 +262,7 @@ class OraclePipeline:
 
 
 
+
     #function that loads the data to mssql
     def single_load(self, data_df):
         try:
@@ -278,39 +279,15 @@ class OraclePipeline:
 
                 #check if row already exists in table, POSNR is primary Key
                 statement = f"SELECT * FROM {self.table_name} WHERE POSNR = '{row['POSNR']}'"
-                logger.info(f'Checking if row with POSNR {row["POSNR"]} already exists..')
+                logger.debug(f'Checking if row with POSNR {row["POSNR"]} already exists..')
                 logger.debug(f'Statement: {statement}')
                 mssql_cursor.execute(statement)
 
                 #if row exists, update row
                 #if row exists, update row
                 if mssql_cursor.fetchone() is not None:
-                   
                     logger.info(f'Row with POSNR {row["POSNR"]} already exists, updating..')
-                    
-
-
-                    prepared_statement = f"UPDATE {self.table_name} SET "
-                    for header in headers:
-                        if pd.isna(row[header]):
-                            prepared_statement += f"{header} = NULL, "
-                        else:
-                            prepared_statement += f"{header} = '{row[header]}', "
-
-                    prepared_statement = prepared_statement[:-2]
-                    prepared_statement += f" WHERE POSNR = '{row['POSNR']}'"
-                    logger.debug(f'Prepared statement: {prepared_statement}')
-
-
-                    mssql_cursor.execute(prepared_statement)
-                    #commit changes to mssql db
-                    self.mssql_conn.commit()
-
-                    #save row to csv in loaded folder, csv name with timestamp
-                    with open(loaded_file_path, 'a+', newline='', encoding='utf-8') as f:
-                        writer = csv.writer(f)
-                        writer.writerow(row)
-
+                    self.update_row(row, headers)
 
 
                 #if row does not exist, insert row
@@ -380,6 +357,47 @@ class OraclePipeline:
         except Exception as e:
             logger.error(f'Error loading data to MSSQL DB: {e}')
             raise e
+
+
+    #function that takes a single  dataframe row and updates it in mssql
+    def update_row(self, row, headers):
+        try:
+            logger = logging.getLogger(__name__ + "." + self.table_name + '.update_row')
+            mssql_cursor = self.mssql_conn.cursor()
+            prepared_statement = f"UPDATE {self.table_name} SET "
+            for header in headers:
+                if pd.isna(row[header]):
+                    prepared_statement += f"{header} = NULL, "
+                else:
+                    prepared_statement += f"{header} = '{row[header]}', "
+
+            prepared_statement = prepared_statement[:-2]
+            prepared_statement += f" WHERE POSNR = '{row['POSNR']}'"
+            logger.debug(f'Prepared statement: {prepared_statement}')
+            mssql_cursor.execute(prepared_statement)
+            self.mssql_conn.commit()
+
+            #save row to csv in updated folder, csv name with timestamp
+            updated_path = f'data/loaded/{self.table_name}/loaded'
+            updated_file_path = f'{updated_path}/{self.table_name}_{self.run_date}_updated.csv'
+            created = create_directory(updated_path)
+            #save failed row to csv in failed_inserts folder
+            with open(updated_file_path, 'a+', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(row)
+        
+        except Exception as e:
+            logger.error(f'Error updating data to MSSQL DB: {e}')
+            failed_update_path = f'data/loaded/{self.table_name}/failed_inserts'
+            failed_update_file_path = f'{failed_update_path}/{self.table_name}_{self.run_date}_failed_update.csv'
+            created = create_directory(failed_update_path)
+            #save failed row to csv in failed_inserts folder
+            with open(failed_update_file_path, 'a+', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(row)
+            raise e
+
+
 
 
 
