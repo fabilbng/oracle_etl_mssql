@@ -40,11 +40,12 @@ def setup_logging():
         print(f'Error setting up logging: {e}')
         sys.exit('Error setting up logging')
 
+
 #function to cleanup storage, it deletes all files in the data folder and subdfolders older than 7 days
 def storage_cleanup():
     try:
         logger = logging.getLogger(__name__)
-        logger.info('Starting storage cleanup')
+        logger.debug('Starting storage cleanup')
         create_directory('data')
         for root, dirs, files in os.walk('data'):
             for file in files:
@@ -72,7 +73,7 @@ def run_pipelines():
 
     #get array of tables from settings, settings has array of dictionaries with table "name" and "exclude_columns"
     tables = [table['name'] for table in settings['tables']]
-    logger.info(f'Tables to run: {tables}')
+    logger.debug(f'Tables to run: {tables}')
 
     pipeline = OraclePipeline()
     for table in tables:
@@ -87,10 +88,7 @@ def run_pipelines():
 
 
 
-
 if __name__ == '__main__':
     setup_logging()
     run_pipelines()
     storage_cleanup()
-
-

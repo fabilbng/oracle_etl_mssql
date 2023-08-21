@@ -273,7 +273,7 @@ class OraclePipeline:
         try:
             logger = logging.getLogger(__name__ + "." + self.table_name + '.single_load')
             logger.info('Loading data to MSSQL DB')
-            
+          
             loaded_file_path = f'{self.loaded_path}/{self.table_name}_{self.run_date}_loaded.csv'
             mssql_cursor = self.mssql_conn.cursor()
             #get headers from csv
