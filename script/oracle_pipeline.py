@@ -21,7 +21,7 @@ mssql_db = os.getenv('MSSQL_DB')
 mssql_un = os.getenv('MSSQL_UN')
 mssql_pw = os.getenv('MSSQL_PW')
 env = os.getenv('ENV')
-logger = logging.getLogger(__name__)
+
 
 
 class OraclePipeline:
@@ -48,10 +48,10 @@ class OraclePipeline:
             logger.info(f'Initializing OraclePipeline')
             #timestamp of when the pipeline is run
             self.run_date = datetime.datetime.now().strftime('%Y%d%m_%H%M%S')
-            logger.info('Connecting to oracle database')
+            logger.debug('Connecting to oracle database')
             self.oracle_conn = oracledb.connect(user=oracle_un, password=oracle_pw, dsn=oracle_db)
 
-            logger.info('Connecting to mssql database')
+            logger.debug('Connecting to mssql database')
             connect_string_2  = f'DRIVER=SQL Server;SERVER={mssql_dbs};DATABASE={mssql_db};UID={mssql_un};PWD={mssql_pw}'
             connect_string_1 = f'DRIVER=SQL Server;SERVER={mssql_dbs};DATABASE={mssql_db};trusted=1'
             if env == 'dev':
@@ -60,9 +60,6 @@ class OraclePipeline:
                 self.mssql_conn = pyodbc.connect(connect_string_2)
             else:
                 raise ValueError('Wrong value given for env (either dev or prod)')
-
-            #creating neccessary folders
-            logger.info('Creating neccessary folders')
 
         except Exception as e:
             logger.error(f'Error initializing OraclePipeline: {e}')

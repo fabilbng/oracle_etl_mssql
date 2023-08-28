@@ -1,11 +1,10 @@
 import os
 import logging
 
-# Create a logger
-logger = logging.getLogger(__name__)
 
 def create_directory(directory):
     try:
+        logger = logging.getLogger(__name__)
         #checking if directory with table_name exists
         if not os.path.exists(directory):
             os.makedirs(directory)
