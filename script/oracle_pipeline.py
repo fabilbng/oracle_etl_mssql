@@ -25,31 +25,15 @@ env = os.getenv('ENV')
 
 
 class OraclePipeline:
-    def __init__(self, table_name = '', exclude_columns = []):
+    def __init__(self):
         try:
-
-            
-            if table_name == '':
-                self.table_name = ''
-                self.raw_path = 'data/raw'
-                self.transformed_path = 'data/transformed'
-                self.loaded_path = 'data/loaded'
-                self.table_info_path = 'data/table_info'
-            elif table_name != '':
-                self.table_name = table_name
-                self.raw_path = f'data/raw/{self.table_name}'
-                self.transformed_path = f'data/transformed/{self.table_name}'
-                self.loaded_path = f'data/loaded/{self.table_name}'
-                self.table_info_path = f'data/table_info/{self.table_name}'
-            self.exclude_columns = exclude_columns
             
             
             logger = logging.getLogger(__name__ + '.__init__')
             logger.info(f'Initializing OraclePipeline')
-            #timestamp of when the pipeline is run
-            self.run_date = datetime.datetime.now().strftime('%Y%d%m_%H%M%S')
             logger.debug('Connecting to oracle database')
             self.oracle_conn = oracledb.connect(user=oracle_un, password=oracle_pw, dsn=oracle_db)
+
 
             logger.debug('Connecting to mssql database')
             connect_string_2  = f'DRIVER=SQL Server;SERVER={mssql_dbs};DATABASE={mssql_db};UID={mssql_un};PWD={mssql_pw}'
@@ -60,6 +44,7 @@ class OraclePipeline:
                 self.mssql_conn = pyodbc.connect(connect_string_2)
             else:
                 raise ValueError('Wrong value given for env (either dev or prod)')
+
 
         except Exception as e:
             logger.error(f'Error initializing OraclePipeline: {e}')
@@ -129,7 +114,7 @@ class OraclePipeline:
             entry_date = self.get_last_update_date()
 
 
-
+        
             #get data from oracle db     
             statement = f'SELECT * FROM DSPJTENERGY.{self.table_name} WHERE U_DATE >= TO_DATE(\'{entry_date}\', \'YYYY-MM-DD\')'
             logger.debug(f'Getting data from oracle db where U_DATE >= {entry_date}')
@@ -646,6 +631,7 @@ class OraclePipeline:
 
             #run pipeline
             self.run_date = datetime.datetime.now().strftime('%Y%d%m_%H%M%S')
+
             raw_file_path = self.extract()
             transformed_file_path = self.transform(raw_file_path)
             self.load(transformed_file_path)
