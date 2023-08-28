@@ -175,7 +175,7 @@ class OraclePipeline:
 
 
             #save table info to csv in raw folder
-            logger.info(f'Saving table info to csv in table info folder: {table_info_file_path}')
+            logger.debug(f'Saving table info to csv in table info folder: {table_info_file_path}')
             with open(table_info_file_path, 'w+', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 #create array of header names
@@ -553,7 +553,7 @@ class OraclePipeline:
 
 
             #check if table already exists in mssql
-            logger.info(f'Checking if table {self.table_name} exists in mssql')
+            logger.debug(f'Checking if table {self.table_name} exists in mssql')
             statement = f"SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{self.table_name}'"
             logger.debug(f'Statement: {statement}')
             mssql_cursor = self.mssql_conn.cursor()
@@ -564,7 +564,7 @@ class OraclePipeline:
 
             #if table exists, check if table structure is the same
             if table_exists:
-                logger.info(f'Table {self.table_name} already exists in mssql, checking if strcuture is the same')
+                logger.debug(f'Table {self.table_name} already exists in mssql, checking if strcuture is the same')
                 statement = f"SELECT COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{self.table_name}'"
                 #get table info from mssql
                 logger.debug(f'Statement: {statement}')
@@ -578,10 +578,10 @@ class OraclePipeline:
                 mssql_table_info_df = create_data_type_length_scale_column(mssql_table_info_df)
                 #check if table info is the same
                 if oracle_table_info_df.equals(mssql_table_info_df):
-                    logger.info(f'Table {self.table_name} structure is the same, no need to alter table')
+                    logger.debug(f'Table {self.table_name} structure is the same, no need to alter table')
                     return 0 #return 0 if table structure is the same
                 else:
-                    logger.info(f'Table {self.table_name} structure is different, altering table')
+                    logger.debug(f'Table {self.table_name} structure is different, altering table')
                     #check which columns are different
                     #get columns that are in oracle but not in mssql
                     oracle_columns_not_in_mssql = oracle_table_info_df[~oracle_table_info_df['COLUMN_NAME'].isin(mssql_table_info_df['COLUMN_NAME'])]
@@ -592,7 +592,7 @@ class OraclePipeline:
                         alter_table_statement += f'ADD {row["COLUMN_NAME"]} {row["DATA_TYPE_LENGTH_SCALE"]},'
                     #remove last comma
                     alter_table_statement = alter_table_statement[:-1]
-                    logger.debug(f'Alter table statement: {alter_table_statement}')
+                    logger.debug(f'Statement: {alter_table_statement}')
                     #execute ALTER TABLE statement
                     mssql_cursor.execute(alter_table_statement)
                     self.mssql_conn.commit()
