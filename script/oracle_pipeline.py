@@ -28,7 +28,7 @@ class OraclePipeline:
     def __init__(self):
         try:
             
-            
+
             logger = logging.getLogger(__name__ + '.__init__')
             logger.info(f'Initializing OraclePipeline')
             logger.debug('Connecting to oracle database')
@@ -84,7 +84,7 @@ class OraclePipeline:
             mssql_cursor = self.mssql_conn.cursor()
             if new:
                 logger.info('New table detected')
-                logger.info(f'Inserting new row in table LastUpdate for table {self.table_name}')
+                logger.debug(f'Inserting new row in table LastUpdate for table {self.table_name}')
                 #insert new row with current table name and data 2000-01-01
                 statement = f"INSERT INTO LastUpdate VALUES('{self.table_name}', '2000-01-01')"
                 logger.debug(f'Statement: {statement}')
@@ -633,7 +633,9 @@ class OraclePipeline:
             self.run_date = datetime.datetime.now().strftime('%Y%d%m_%H%M%S')
 
             raw_file_path = self.extract()
+
             transformed_file_path = self.transform(raw_file_path)
+            
             self.load(transformed_file_path)
             self.set_last_update_date()
             logger.debug(f'Pipeline for table {self.table_name} successfully ran')
