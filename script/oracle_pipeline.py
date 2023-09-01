@@ -27,8 +27,6 @@ env = os.getenv('ENV')
 class OraclePipeline:
     def __init__(self):
         try:
-            
-
             logger = logging.getLogger(__name__ + '.__init__')
             logger.info(f'Initializing OraclePipeline')
             logger.debug('Connecting to oracle database')
@@ -615,9 +613,10 @@ class OraclePipeline:
     
     #running entire pipeline
     def run_pipeline(self, table_name, exclude_columns = []):
-        try:
-            logger = logging.getLogger(__name__ + "." + self.table_name + '.run_pipeline')
+        logger = logging.getLogger(__name__ + "." + table_name + '.run_pipeline')
+        try: 
             logger.debug(f'Running pipeline for table {table_name}')
+
             #setting table name
             self.table_name = table_name
             self.exclude_columns = exclude_columns
