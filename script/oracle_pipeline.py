@@ -559,6 +559,7 @@ class OraclePipeline:
                 mssql_table_info_df['DATA_LENGTH'] = mssql_table_info_df['DATA_LENGTH'].fillna(0).astype(int)
                 mssql_table_info_df['DATA_TYPE'] = mssql_table_info_df['DATA_TYPE'].str.upper()
                 mssql_table_info_df = create_data_type_length_scale_column(mssql_table_info_df)
+                
                 #check if table info is the same
                 if oracle_table_info_df.equals(mssql_table_info_df):
                     logger.debug(f'Table {self.table_name} structure is the same, no need to alter table')
@@ -569,10 +570,10 @@ class OraclePipeline:
                     #get columns that are in oracle but not in mssql
                     oracle_columns_not_in_mssql = oracle_table_info_df[~oracle_table_info_df['COLUMN_NAME'].isin(mssql_table_info_df['COLUMN_NAME'])]
                     #prepare ALTER TABLE statement
-                    alter_table_statement = f'ALTER TABLE {self.table_name} '
+                    alter_table_statement = f'ALTER TABLE {self.table_name} ADD '
                     #add columns that are in oracle but not in mssql
                     for index, row in oracle_columns_not_in_mssql.iterrows():
-                        alter_table_statement += f'ADD {row["COLUMN_NAME"]} {row["DATA_TYPE_LENGTH_SCALE"]},'
+                        alter_table_statement += f'{row["COLUMN_NAME"]} {row["DATA_TYPE_LENGTH_SCALE"]},'
                     #remove last comma
                     alter_table_statement = alter_table_statement[:-1]
                     logger.debug(f'Statement: {alter_table_statement}')
